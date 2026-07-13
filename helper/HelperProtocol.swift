@@ -299,10 +299,25 @@ public struct RealCommandRunner: PrivilegedCommandRunning {
         return (String(data: outBox.get(), encoding: .utf8) ?? "") + (String(data: errBox.get(), encoding: .utf8) ?? "")
     }
 
+    private func configureEnvironment(for process: Process) {
+        var env = ProcessInfo.processInfo.environment
+        if let connection = NSXPCConnection.current() {
+            let uid = connection.effectiveUserIdentifier
+            let gid = connection.effectiveGroupIdentifier
+            env["SUDO_UID"] = String(uid)
+            env["SUDO_GID"] = String(gid)
+            if let pw = getpwuid(uid), let dir = pw.pointee.pw_dir {
+                env["HOME"] = String(cString: dir)
+            }
+        }
+        process.environment = env
+    }
+
     public func run(_ executablePath: String, _ arguments: [String]) -> CommandResult {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executablePath)
         process.arguments = arguments
+        configureEnvironment(for: process)
 
         let outPipe = Pipe()
         let errPipe = Pipe()
@@ -322,6 +337,7 @@ public struct RealCommandRunner: PrivilegedCommandRunning {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executablePath)
         process.arguments = arguments
+        configureEnvironment(for: process)
 
         let inPipe = Pipe()
         let outPipe = Pipe()
