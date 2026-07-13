@@ -15,7 +15,8 @@ extension NSWorkspace: WorkspaceOpening {
         process.arguments = [path]
         do {
             try process.run()
-            return true
+            process.waitUntilExit()
+            return process.terminationStatus == 0
         } catch {
             return false
         }
