@@ -97,7 +97,7 @@ check_kernel_pin() {
 }
 
 check_bridge_up() {
-  pgrep -f 'vmnet-helper' >/dev/null 2>&1 && echo "up" || echo "down"
+  (pgrep 'vmnet-helper' >/dev/null 2>&1 || pgrep 'gvproxy' >/dev/null 2>&1) && echo "up" || echo "down"
 }
 
 current_mounts() {

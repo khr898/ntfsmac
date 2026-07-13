@@ -92,10 +92,12 @@ public struct PopoverContentView: View {
         .sheet(isPresented: $showFDAPrompt) {
             FDAPromptView(
                 onOpenSettings: {
-                    showFDAPrompt = false
-                    mountController.clearError()
                     if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
                         NSWorkspace.shared.open(url)
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        showFDAPrompt = false
+                        mountController.clearError()
                     }
                 },
                 onCancel: {

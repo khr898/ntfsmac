@@ -7,6 +7,8 @@ public protocol WorkspaceOpening {
     func activateFileViewerSelecting(_ fileURLs: [URL])
     @discardableResult
     func open(_ url: URL) -> Bool
+    @discardableResult
+    func selectFile(_ fullPath: String?, inFileViewerRootedAtPath rootPath: String) -> Bool
 }
 
 extension NSWorkspace: WorkspaceOpening {}
@@ -34,7 +36,7 @@ public final class FinderOpener {
     public func open(_ drive: Drive, state: MountState, mountPoint: String? = nil) {
         guard isEnabled(for: state) else { return }
         let path = mountPoint ?? Self.mountPoint(for: drive)
-        workspace.open(URL(fileURLWithPath: path))
+        workspace.selectFile(nil, inFileViewerRootedAtPath: path)
     }
 
     /// Fallback heuristic for when no real mount point is available (see
