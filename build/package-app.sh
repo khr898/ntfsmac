@@ -80,7 +80,7 @@ main() {
   # guaranteed to match exactly what the bundle actually contains.
   local cli_stage
   cli_stage="$(mktemp -d)"
-  mkdir -p "$cli_stage/vendor/bin" "$cli_stage/vendor/kernel" "$cli_stage/cli/commands" "$cli_stage/cli/lib"
+  mkdir -p "$cli_stage/vendor/bin" "$cli_stage/vendor/kernel" "$cli_stage/cli/commands" "$cli_stage/cli/lib" "$cli_stage/build/lib"
   if ! cp "$REPO_ROOT/install.sh" "$cli_stage/install.sh"; then
     echo "package-app: HARD-STOP — failed to stage install.sh" >&2
     exit 1
@@ -96,6 +96,14 @@ main() {
   fi
   if ! cp "$REPO_ROOT"/cli/lib/*.sh "$cli_stage/cli/lib/"; then
     echo "package-app: HARD-STOP — failed to stage cli/lib/*.sh" >&2
+    exit 1
+  fi
+  if ! cp "$REPO_ROOT/build/sources.lock" "$cli_stage/build/sources.lock"; then
+    echo "package-app: HARD-STOP — failed to stage build/sources.lock" >&2
+    exit 1
+  fi
+  if ! cp "$REPO_ROOT/build/lib/lock.sh" "$cli_stage/build/lib/lock.sh"; then
+    echo "package-app: HARD-STOP — failed to stage build/lib/lock.sh" >&2
     exit 1
   fi
   if [[ -d "$REPO_ROOT/vendor/kernel" ]]; then
