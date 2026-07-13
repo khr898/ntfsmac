@@ -70,7 +70,7 @@ final class FakeCLIStaging: CLIStaging {
     let checker = CLIInstallChecker(candidatePaths: ["/nonexistent/bin/ntfsmac"])
     let helper = FakeCLIStaging()
     helper.stubbedError = HelperClientError.helper("rejected: cli-src content does not match the hash pinned into this helper at build time — refusing (possible tampering)")
-    let stager = CLIAutoStager(helper: helper, checker: checker, bundleResourcesURL: URL(fileURLWithPath: "/Applications/ntfsmac.app/Contents/Resources"))
+    let stager = CLIAutoStager(helper: helper, checker: checker, bundleResourcesURL: URL(fileURLWithPath: "/Applications/ntfsmac.app/Contents/Resources"), connectionRetryDelayNanoseconds: 1_000_000)
 
     await stager.stageIfNeeded()
 
@@ -96,19 +96,23 @@ final class FakeCLIStaging: CLIStaging {
     // The automatic attempt (`stageIfNeeded`) fails and sets `didAttempt` — a second automatic
     // call must stay a no-op (`stageIfNeededOnlyAttemptsOncePerLaunch` covers that). `retry()` is
     // the explicit exception: an in-app button tap must still be able to try again and clear a
-    // stale failure reason once it succeeds.
+    // stale failure reason once it succeeds. Doesn't assert an exact call count for the first
+    // attempt — `attemptStage()` internally blanket-retries a connection-level error up to
+    // `connectionRetryAttempts` times on its own (see `CLIAutoStager.swift`), so a permanently-set
+    // `stubbedError` legitimately drives multiple calls before `stageIfNeeded()` even returns.
     let checker = CLIInstallChecker(candidatePaths: ["/nonexistent/bin/ntfsmac"])
     let helper = FakeCLIStaging()
     helper.stubbedError = HelperClientError.proxyUnavailable
-    let stager = CLIAutoStager(helper: helper, checker: checker, bundleResourcesURL: URL(fileURLWithPath: "/Applications/ntfsmac.app/Contents/Resources"))
+    let stager = CLIAutoStager(helper: helper, checker: checker, bundleResourcesURL: URL(fileURLWithPath: "/Applications/ntfsmac.app/Contents/Resources"), connectionRetryDelayNanoseconds: 1_000_000)
 
     await stager.stageIfNeeded()
-    #expect(helper.calls.count == 1)
+    let callsAfterFirstAttempt = helper.calls.count
+    #expect(callsAfterFirstAttempt > 0)
     #expect(stager.lastFailureReason != nil)
 
     helper.stubbedError = nil
     await stager.retry()
 
-    #expect(helper.calls.count == 2, "retry() must actually re-invoke staging, not just re-check the filesystem")
+    #expect(helper.calls.count == callsAfterFirstAttempt + 1, "retry() must actually re-invoke staging, not just re-check the filesystem")
     #expect(stager.lastFailureReason == nil)
 }

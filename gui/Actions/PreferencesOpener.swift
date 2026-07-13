@@ -1,5 +1,8 @@
 import AppKit
 import SwiftUI
+import os.log
+
+private let preferencesLog = Logger(subsystem: "com.khr898.ntfsmac", category: "PreferencesOpener")
 
 /// Opens the Preferences window (GUI-PLAN.md "Preferences window" — gear icon in every screen's
 /// footer). Originally routed through SwiftUI's `Settings` scene via
@@ -29,8 +32,27 @@ public enum PreferencesOpener {
             return
         }
         guard let makeContent else { return }
-        let hosting = NSHostingController(rootView: makeContent())
+
+        // Diagnostic only (temporary — remove once the ~5s first-open lag reported live is
+        // localized and fixed): times each step of the cold-start path. No call into
+        // `HelperInstaller`/`HelperClient` happens on this path, so their 5s
+        // `staleCheckTimeoutNanoseconds` is not reachable from here — ruled out by inspection, not
+        // by this logging. Read via `log stream --predicate 'subsystem == "com.khr898.ntfsmac" AND
+        // category == "PreferencesOpener"'` while reproducing.
+        let openStart = Date()
+
+        let beforeContent = Date()
+        let content = makeContent()
+        logElapsed("makeContent()", since: beforeContent)
+
+        let beforeHosting = Date()
+        let hosting = NSHostingController(rootView: content)
+        logElapsed("NSHostingController.init", since: beforeHosting)
+
+        let beforeWindow = Date()
         let newWindow = NSWindow(contentViewController: hosting)
+        logElapsed("NSWindow.init", since: beforeWindow)
+
         newWindow.title = "ntfsmac Preferences"
         newWindow.styleMask = [.titled, .closable]
         // `LSUIElement` apps have no real main window for Preferences to be a child of. `.floating`
@@ -40,6 +62,15 @@ public enum PreferencesOpener {
         newWindow.level = NSWindow.Level(rawValue: NSWindow.Level.popUpMenu.rawValue + 1)
         newWindow.center()
         window = newWindow
+
+        let beforeFront = Date()
         newWindow.makeKeyAndOrderFront(nil)
+        logElapsed("makeKeyAndOrderFront", since: beforeFront)
+        logElapsed("open() total (first call)", since: openStart)
+    }
+
+    private static func logElapsed(_ label: String, since start: Date) {
+        let ms = Date().timeIntervalSince(start) * 1000
+        preferencesLog.notice("\(label, privacy: .public): \(ms, privacy: .public)ms")
     }
 }

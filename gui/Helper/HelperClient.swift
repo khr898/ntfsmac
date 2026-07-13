@@ -1,5 +1,8 @@
 import Foundation
 import HelperShared
+import os.log
+
+private let helperClientLog = Logger(subsystem: "com.khr898.ntfsmac", category: "HelperClient")
 
 public enum HelperClientError: Error {
     case invalidDevice(String)
@@ -23,18 +26,65 @@ public final class HelperClient: Sendable {
     // a real, scoped, platform-backed exception, not a blind suppression. Explicit `Sendable` on
     // the class (added for `StaleHelperDetecting`'s `withTaskGroup`-based timeout in
     // `HelperInstaller`, which needs to capture a `HelperClient` in a `@Sendable` closure): safe
-    // because `@MainActor` isolation already serializes every other access, and this one field is
-    // the documented exception above, not a new unchecked one.
-    private nonisolated(unsafe) let connection: NSXPCConnection
+    // because every access to `connection` now goes through `currentConnection()`, which takes
+    // `connectionLock` — the lock is the new documented exception, not a new unchecked one.
+    //
+    // Self-healing reconnect: a mach connection created (or first messaged) before the helper
+    // daemon is actually listening — the exact race right after a fresh `SMJobBless`, or the
+    // already-documented "helper reinstalled while the GUI keeps running" case below — can
+    // `invalidate()` itself. Apple's docs: an invalidated `NSXPCConnection` is permanently dead,
+    // never reconnects on its own. Every caller used to share that one dead connection for the
+    // rest of the process, which read as "can't communicate with helper until app restart" even
+    // though a fresh process (a fresh connection) worked immediately. `invalidationHandler` below
+    // flags that, and `currentConnection()` rebuilds a fresh connection the next time anyone
+    // actually calls the helper — no restart needed.
+    private nonisolated(unsafe) var connection: NSXPCConnection
+    private let connectionLock = NSLock()
+    private let machServiceName: String
+    private nonisolated(unsafe) var needsReconnect = false
 
     public init(machServiceName: String = helperMachServiceName) {
-        connection = NSXPCConnection(machServiceName: machServiceName, options: .privileged)
-        connection.remoteObjectInterface = NSXPCInterface(with: HelperXPCProtocol.self)
-        connection.resume()
+        self.machServiceName = machServiceName
+        self.connection = Self.makeConnection(machServiceName: machServiceName)
+        wireInvalidationHandler(on: connection)
     }
 
     deinit {
         connection.invalidate()
+    }
+
+    private nonisolated static func makeConnection(machServiceName: String) -> NSXPCConnection {
+        let connection = NSXPCConnection(machServiceName: machServiceName, options: .privileged)
+        connection.remoteObjectInterface = NSXPCInterface(with: HelperXPCProtocol.self)
+        connection.resume()
+        return connection
+    }
+
+    // Runs on XPC's own internal queue, never the main actor — same reasoning `call()`/`version()`
+    // below already document for their handlers. Only flips a lock-guarded flag; the actual
+    // rebuild happens lazily on the next real call (`currentConnection()`), off this callback's
+    // thread, and only if anyone actually calls the helper again.
+    private nonisolated func wireInvalidationHandler(on connection: NSXPCConnection) {
+        connection.invalidationHandler = { [weak self] in
+            guard let self else { return }
+            helperClientLog.notice("XPC connection invalidated — will rebuild on next call")
+            self.connectionLock.lock()
+            self.needsReconnect = true
+            self.connectionLock.unlock()
+        }
+    }
+
+    // `connectionLock`-guarded so the invalidation callback above and a `call()`/`version()`
+    // caller can't race over which connection is "current."
+    private nonisolated func currentConnection() -> NSXPCConnection {
+        connectionLock.lock()
+        defer { connectionLock.unlock() }
+        if needsReconnect {
+            connection = Self.makeConnection(machServiceName: machServiceName)
+            wireInvalidationHandler(on: connection)
+            needsReconnect = false
+        }
+        return connection
     }
 
     // `nonisolated`: NSXPCConnection invokes both this and the error handler below from its own
@@ -63,7 +113,7 @@ public final class HelperClient: Sendable {
     // double-resume) and turns every silent hang into a real thrown error.
     private nonisolated func call(_ body: @escaping @Sendable (HelperXPCProtocol, @escaping @Sendable (Data?, String?) -> Void) -> Void) async throws -> CommandResult {
         try await withCheckedThrowingContinuation { continuation in
-            guard let proxy = connection.remoteObjectProxyWithErrorHandler({ error in
+            guard let proxy = currentConnection().remoteObjectProxyWithErrorHandler({ error in
                 continuation.resume(throwing: HelperClientError.helper(error.localizedDescription))
             }) as? HelperXPCProtocol else {
                 continuation.resume(throwing: HelperClientError.proxyUnavailable)
@@ -121,7 +171,7 @@ public final class HelperClient: Sendable {
     /// `PopoverStateRenderTests`, which constructs `CLIAutoStager`/`HelperClient` for real).
     public nonisolated func version() async throws -> String {
         try await withCheckedThrowingContinuation { continuation in
-            guard let proxy = connection.remoteObjectProxyWithErrorHandler({ error in
+            guard let proxy = currentConnection().remoteObjectProxyWithErrorHandler({ error in
                 continuation.resume(throwing: HelperClientError.helper(error.localizedDescription))
             }) as? HelperXPCProtocol else {
                 continuation.resume(throwing: HelperClientError.proxyUnavailable)

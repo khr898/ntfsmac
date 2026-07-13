@@ -25,16 +25,23 @@ public final class CLIAutoStager: ObservableObject {
     private let helper: any CLIStaging
     private let checker: CLIInstallChecker
     private let bundleResourcesURL: URL?
+    private let connectionRetryDelayNanoseconds: UInt64
     private var didAttempt = false
 
+    /// `connectionRetryDelayNanoseconds` injectable same as `HelperInstaller.staleCheckTimeoutNanoseconds`
+    /// — production default is a real ~4s bounded wait for a cold `launchd` daemon spin-up right
+    /// after `SMJobBless`; tests inject a near-zero delay so exercising all
+    /// `connectionRetryAttempts` doesn't make the suite itself slow.
     public init(
         helper: any CLIStaging = HelperClient(),
         checker: CLIInstallChecker,
-        bundleResourcesURL: URL? = Bundle.main.resourceURL
+        bundleResourcesURL: URL? = Bundle.main.resourceURL,
+        connectionRetryDelayNanoseconds: UInt64 = 800_000_000
     ) {
         self.helper = helper
         self.checker = checker
         self.bundleResourcesURL = bundleResourcesURL
+        self.connectionRetryDelayNanoseconds = connectionRetryDelayNanoseconds
     }
 
     public func stageIfNeeded() async {
@@ -59,12 +66,16 @@ public final class CLIAutoStager: ObservableObject {
     /// own "Couldn't communicate with a helper application.") that has nothing to do with
     /// `install.sh` itself. Safe to blanket-retry any thrown error: `stageCLI` only ever throws
     /// on its own input-validation guards or a broken connection — a real `install.sh` failure
-    /// always replies with XPC success (nonzero `exitCode`, handled below, never retried). Three
-    /// attempts / 300ms apart clears the boot race well within CLIMissingView's own "this only
-    /// takes a moment" copy, instead of surfacing a scary transient error the user then has to
-    /// manually dismiss with Retry.
-    private static let connectionRetryAttempts = 3
-    private static let connectionRetryDelayNanoseconds: UInt64 = 300_000_000
+    /// always replies with XPC success (nonzero `exitCode`, handled below, never retried).
+    /// 6 attempts at the (injectable) `connectionRetryDelayNanoseconds` apart — production default
+    /// totals ~4s, matching `HelperInstaller.staleCheckTimeoutNanoseconds`'s existing bounded-wait
+    /// budget for the identical "daemon just blessed, not listening yet" race. The original
+    /// 3×300ms (~900ms) budget was too tight for a cold launchd spin-up (codesign verification +
+    /// first process launch), which surfaced as a permanent "setup incomplete" needing a manual
+    /// Retry or app restart to clear — `HelperClient` now also self-heals a dead connection on
+    /// retry (see its `currentConnection()`), so this is the belt to that fix's suspenders for the
+    /// pure-timing residual.
+    private static let connectionRetryAttempts = 6
 
     private func attemptStage() async {
         checker.check()
@@ -100,7 +111,7 @@ public final class CLIAutoStager: ObservableObject {
                     checker.check()
                     return
                 }
-                try? await Task.sleep(nanoseconds: Self.connectionRetryDelayNanoseconds)
+                try? await Task.sleep(nanoseconds: connectionRetryDelayNanoseconds)
             }
         }
     }
