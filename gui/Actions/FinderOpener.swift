@@ -6,10 +6,22 @@ import HelperShared
 public protocol WorkspaceOpening {
     func activateFileViewerSelecting(_ fileURLs: [URL])
     @discardableResult
-    func open(_ url: URL) -> Bool
+    func openPathInFinder(_ path: String) -> Bool
 }
 
-extension NSWorkspace: WorkspaceOpening {}
+extension NSWorkspace: WorkspaceOpening {
+    public func openPathInFinder(_ path: String) -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        process.arguments = [path]
+        do {
+            try process.run()
+            return true
+        } catch {
+            return false
+        }
+    }
+}
 
 /// `Open in Finder` (GUI-PLAN.md "Popover — mounted"): reveals the mount point via
 /// `NSWorkspace` — never a shell-out (this unit's Don't clause, e.g. no `open` subprocess).
@@ -59,7 +71,7 @@ public final class FinderOpener {
         }
         
         let finalPath = path ?? Self.mountPoint(for: drive)
-        workspace.open(URL(fileURLWithPath: finalPath))
+        workspace.openPathInFinder(finalPath)
     }
 
     /// Fallback heuristic for when no real mount point is available (see

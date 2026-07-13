@@ -9,15 +9,15 @@ import HelperShared
 private let sampleDrive = Drive(identifier: "disk4s2", fsType: "ntfs", label: "My Drive", size: "500.0 GB")
 
 private final class FakeWorkspace: WorkspaceOpening {
-    private(set) var openedURLs: [URL] = []
+    private(set) var openedPaths: [String] = []
     private(set) var revealedURLs: [URL] = []
     
     func activateFileViewerSelecting(_ fileURLs: [URL]) {
         revealedURLs.append(contentsOf: fileURLs)
     }
     
-    func open(_ url: URL) -> Bool {
-        openedURLs.append(url)
+    func openPathInFinder(_ path: String) -> Bool {
+        openedPaths.append(path)
         return true
     }
 }
@@ -45,7 +45,7 @@ private final class FakeRunner: PrivilegedCommandRunning {
 
     opener.open(sampleDrive, state: .mountedReadWrite)
 
-    #expect(fake.openedURLs == [URL(fileURLWithPath: "/Volumes/My Drive")])
+    #expect(fake.openedPaths == ["/Volumes/My Drive"])
 }
 
 @MainActor
@@ -56,7 +56,7 @@ private final class FakeRunner: PrivilegedCommandRunning {
 
     opener.open(sampleDrive, state: .mountedReadOnlyDirty)
 
-    #expect(fake.openedURLs.count == 1)
+    #expect(fake.openedPaths.count == 1)
 }
 
 @MainActor
@@ -67,7 +67,7 @@ private final class FakeRunner: PrivilegedCommandRunning {
 
     opener.open(sampleDrive, state: .mountedReadWrite, mountPoint: "/Volumes/CustomFolder")
 
-    #expect(fake.openedURLs == [URL(fileURLWithPath: "/Volumes/CustomFolder")])
+    #expect(fake.openedPaths == ["/Volumes/CustomFolder"])
     #expect(runner.calls.isEmpty) // Shouldn't query status if mountPoint is provided
 }
 
@@ -80,7 +80,7 @@ private final class FakeRunner: PrivilegedCommandRunning {
 
     opener.open(sampleDrive, state: .mountedReadWrite)
 
-    #expect(fake.openedURLs == [URL(fileURLWithPath: "/Volumes/DynamicMedia")])
+    #expect(fake.openedPaths == ["/Volumes/DynamicMedia"])
     #expect(runner.calls.count == 1)
     #expect(runner.calls[0].1 == ["status"])
 }
@@ -94,7 +94,7 @@ private final class FakeRunner: PrivilegedCommandRunning {
 
     opener.open(sampleDrive, state: .mountedReadWrite)
 
-    #expect(fake.openedURLs == [URL(fileURLWithPath: "/Volumes/My Drive")])
+    #expect(fake.openedPaths == ["/Volumes/My Drive"])
 }
 
 @MainActor
@@ -106,7 +106,7 @@ private final class FakeRunner: PrivilegedCommandRunning {
     #expect(opener.isEnabled(for: .mountedReadOnly))
     opener.open(sampleDrive, state: .mountedReadOnly)
 
-    #expect(fake.openedURLs.count == 1)
+    #expect(fake.openedPaths.count == 1)
 }
 
 @MainActor
@@ -118,7 +118,7 @@ private final class FakeRunner: PrivilegedCommandRunning {
 
     opener.open(unlabeled, state: .mountedReadWrite)
 
-    #expect(fake.openedURLs == [URL(fileURLWithPath: "/Volumes/disk5s1")])
+    #expect(fake.openedPaths == ["/Volumes/disk5s1"])
 }
 
 @MainActor
@@ -130,7 +130,7 @@ private final class FakeRunner: PrivilegedCommandRunning {
     #expect(!opener.isEnabled(for: .idle))
     opener.open(sampleDrive, state: .idle)
 
-    #expect(fake.openedURLs.isEmpty)
+    #expect(fake.openedPaths.isEmpty)
 }
 
 @MainActor
@@ -144,5 +144,5 @@ private final class FakeRunner: PrivilegedCommandRunning {
     opener.open(sampleDrive, state: .mounting)
     opener.open(sampleDrive, state: .error)
 
-    #expect(fake.openedURLs.isEmpty)
+    #expect(fake.openedPaths.isEmpty)
 }
