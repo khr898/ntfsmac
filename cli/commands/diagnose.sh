@@ -85,19 +85,44 @@ check_vendor_binaries() {
 
 check_kernel_pin() {
   local lock_sh="$REPO_ROOT/build/lib/lock.sh"
+  if [[ ! -x "$lock_sh" ]]; then
+    lock_sh="$PREFIX/libexec/ntfsmac/lib/lock.sh"
+  fi
+
   local kernel_dir="${NTFSMAC_VENDOR_KERNEL_DIR:-$REPO_ROOT/vendor/kernel}"
-  [[ -x "$lock_sh" ]] || { echo "unknown"; return; }
+  if [[ ! -d "$kernel_dir" ]]; then
+    kernel_dir="$PREFIX/lib"
+  fi
+
+  if [[ ! -x "$lock_sh" ]]; then
+    echo "unknown"
+    return
+  fi
+
   # shellcheck source=../../build/lib/lock.sh
   source "$lock_sh"
   local expected actual
   expected="$(lock_get LIBKRUNFW_MODULES_SHA256 2>/dev/null)" || { echo "unknown"; return; }
-  [[ -f "$kernel_dir/modules.squashfs" ]] || { echo "missing"; return; }
-  actual="$(shasum -a 256 "$kernel_dir/modules.squashfs" | awk '{print $1}')"
+
+  local squashfs_file="$kernel_dir/modules.squashfs"
+  if [[ ! -f "$squashfs_file" && -f "$PREFIX/lib/modules.squashfs" ]]; then
+    squashfs_file="$PREFIX/lib/modules.squashfs"
+  fi
+
+  [[ -f "$squashfs_file" ]] || { echo "missing"; return; }
+  actual="$(shasum -a 256 "$squashfs_file" | awk '{print $1}')"
   [[ "$actual" == "$expected" ]] && echo "match" || echo "mismatch"
 }
 
 check_bridge_up() {
-  (pgrep 'vmnet-helper' >/dev/null 2>&1 || pgrep 'gvproxy' >/dev/null 2>&1) && echo "up" || echo "down"
+  if pgrep 'vmnet-helper' >/dev/null 2>&1 || \
+     pgrep 'gvproxy' >/dev/null 2>&1 || \
+     pgrep 'anylinuxfs' >/dev/null 2>&1 || \
+     ifconfig | grep -E "inet 172\.(1[6-9]|2[0-9]|3[0-1])\." >/dev/null 2>&1; then
+    echo "up"
+  else
+    echo "down"
+  fi
 }
 
 current_mounts() {

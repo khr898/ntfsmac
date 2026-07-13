@@ -141,3 +141,15 @@ private func renderPopover(
     let size = renderPopover(appState: appState, mountController: controller, helperInstaller: helperInstaller, cliInstallChecker: cliInstallChecker)
     #expect(size != nil)
 }
+
+@MainActor @Test func fdaPromptStateRendersWithoutCollapsing() async throws {
+    let (helperInstaller, cliInstallChecker, cleanup) = try await makeInstalledDependencies()
+    defer { cleanup() }
+    let appState = AppState()
+    let controller = MountController(helper: FakeHelper(), appState: appState)
+    controller.errorMessage = "FDA_REQUIRED"
+    #expect(controller.errorMessage == "FDA_REQUIRED")
+
+    let size = renderPopover(appState: appState, mountController: controller, helperInstaller: helperInstaller, cliInstallChecker: cliInstallChecker)
+    #expect(size != nil)
+}

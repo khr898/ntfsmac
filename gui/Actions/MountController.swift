@@ -25,7 +25,7 @@ public final class MountController: ObservableObject {
     /// `/Volumes/<label>` default convention (its own doc comment already flags this as a
     /// heuristic, pending a real value being threaded through; this is that real value).
     @Published public private(set) var mountedMountPoint: String?
-    @Published public private(set) var errorMessage: String?
+    @Published public internal(set) var errorMessage: String?
 
     private let helper: any HelperMounting
     private let readOnlyChecker: any MountReadOnlyChecking
@@ -74,7 +74,21 @@ public final class MountController: ObservableObject {
             let result = try await helper.mount(device: drive.identifier, driver: driver, mountPoint: mountPoint, readOnly: readOnly)
             if result.exitCode == 0 {
                 mountedDrive = drive
-                mountedMountPoint = mountPoint
+                if let mountPoint = mountPoint {
+                    mountedMountPoint = mountPoint
+                } else {
+                    // Parse the actual mount point from the command output, e.g.:
+                    // "/dev/disk4s2 was mounted as /Volumes/My Drive"
+                    let lines = result.output.components(separatedBy: .newlines)
+                    if let mountLine = lines.first(where: { $0.contains(" was mounted as ") }),
+                       let range = mountLine.range(of: " was mounted as ") {
+                        let path = String(mountLine[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                        mountedMountPoint = path
+                    } else {
+                        // Fallback to the heuristic
+                        mountedMountPoint = "/Volumes/\(drive.label.isEmpty ? drive.identifier : drive.label)"
+                    }
+                }
                 // A `readOnly: false` request can still land read-only: ntfs-3g silently falls
                 // back to read-only on a dirty/unclean NTFS journal (same real-mount-options
                 // check `RemountController.confirmRemount` already relies on — `exitCode == 0`

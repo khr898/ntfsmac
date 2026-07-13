@@ -78,7 +78,21 @@ public struct PopoverContentView: View {
             // needed) the moment the helper finishes installing, so helper state is checked
             // first; CLI-missing is the brief, self-clearing window between "helper just
             // installed" and "CLIAutoStager finished running install.sh through it."
-            if helperInstaller.state != .installed {
+            if showFDAPrompt {
+                FDAPromptView(
+                    onOpenSettings: {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
+                            NSWorkspace.shared.open(url)
+                        }
+                        showFDAPrompt = false
+                        mountController.clearError()
+                    },
+                    onCancel: {
+                        showFDAPrompt = false
+                        mountController.clearError()
+                    }
+                )
+            } else if helperInstaller.state != .installed {
                 // GUI-PLAN.md "App shape": "No windows except Preferences and the first-run
                 // helper prompt" — the popover itself gates on the helper being installed first.
                 FirstRunView(installer: helperInstaller, diagnoseRunner: diagnoseRunner, onQuit: quit)
@@ -89,23 +103,6 @@ public struct PopoverContentView: View {
             }
         }
         .task(id: appState.state) { syncThroughputMonitor() }
-        .sheet(isPresented: $showFDAPrompt) {
-            FDAPromptView(
-                onOpenSettings: {
-                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
-                        NSWorkspace.shared.open(url)
-                    }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        showFDAPrompt = false
-                        mountController.clearError()
-                    }
-                },
-                onCancel: {
-                    showFDAPrompt = false
-                    mountController.clearError()
-                }
-            )
-        }
         .onChange(of: mountController.errorMessage) { newValue in
             if newValue == "FDA_REQUIRED" {
                 showFDAPrompt = true
@@ -357,7 +354,6 @@ struct FDAPromptView: View {
         }
         .padding(20)
         .frame(width: 340)
-        .windowGlassBackground()
     }
 }
 
