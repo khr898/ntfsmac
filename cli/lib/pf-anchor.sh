@@ -21,7 +21,7 @@ render_pf_anchor() {
   # over-wide CIDR (e.g. 0.0.0.0/0) previously sailed through untouched. Mirrors
   # HelperProtocol.swift's isValidSubnetCIDR (private /30 only) so this script fails the same
   # way even if invoked directly, not just via the helper's XPC gate.
-  if [[ ! "$subnet" =~ ^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)[0-9]{1,3}\.[0-9]{1,3}/30$ ]]; then
+  if [[ ! "$subnet" =~ ^(10\.[0-9]{1,3}\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)[0-9]{1,3}\.[0-9]{1,3}/30$ ]]; then
     echo "pf-anchor: subnet CIDR must be a private /30 (got \"$subnet\")" >&2
     return 1
   fi

@@ -14,6 +14,7 @@ STUB
   chmod +x "$STUB_DIR/anylinuxfs"
   export PATH="$STUB_DIR:$PATH"
   export NTFSMAC_SKIP_ROOT_CHECK=1
+  export NTFSMAC_SKIP_MOUNT_VERIFY=1
 }
 
 teardown() {

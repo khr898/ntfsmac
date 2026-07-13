@@ -34,9 +34,9 @@ setup() {
 }
 
 @test "a different subnet renders with no cross-contamination" {
-  run render_pf_anchor "10.0.0.0/30"
+  run render_pf_anchor "10.1.2.0/30"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"10.0.0.0/30"* ]]
+  [[ "$output" == *"10.1.2.0/30"* ]]
   [[ "$output" != *"172.27.1.0/30"* ]]
 }
 
