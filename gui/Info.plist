@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>com.khr898.ntfsmac</string>
+	<!-- Required for a real .app bundle to launch — Finder/launchd read this to find the binary
+	     inside Contents/MacOS/. Matches the `ntfsmac-gui` executable product in Package.swift and
+	     the name build/package-app.sh copies it under. -->
+	<key>CFBundleExecutable</key>
+	<string>ntfsmac-gui</string>
+	<key>CFBundleName</key>
+	<string>ntfsmac</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<!--
+	Source asset: gui/Resources/AppIcon.icns (+ AppIcon-source.png, gen_icon.py for edits).
+	No .app bundle assembly script exists yet (packaging is separate, unbuilt work per
+	TESTING.md) — whichever script eventually builds the .app must copy AppIcon.icns into
+	Contents/Resources/AppIcon.icns to match this key.
+	-->
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<!-- No Dock icon, no main window — menu-bar agent shape (L7, GUI-PLAN "App shape"). -->
+	<key>LSUIElement</key>
+	<true/>
+	<!--
+	Mirrors helper/Info.plist's SMAuthorizedClients: SMJobBless requires the trust pairing on
+	both sides. Ad-hoc signing (L4) means no Team ID / trusted certificate chain — same caveat
+	noted in helper/Info.plist and verifyClientIdentity(). Required for SMJobBless to accept the
+	bless request at all; added here by 3-first-run-install, the unit that actually calls it.
+	-->
+	<key>SMPrivilegedExecutables</key>
+	<dict>
+		<key>com.khr898.ntfsmac.helper</key>
+		<string>identifier "com.khr898.ntfsmac.helper"</string>
+	</dict>
+</dict>
+</plist>

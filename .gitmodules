@@ -1,0 +1,3 @@
+[submodule "vendor/src/anylinuxfs"]
+	path = vendor/src/anylinuxfs
+	url = https://github.com/nohajc/anylinuxfs.git

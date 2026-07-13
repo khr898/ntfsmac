@@ -1,0 +1,33 @@
+name: Package DMG
+
+# Manual only — this produces a real distributable artifact, not something to run on
+# every push/PR (see .github/workflows/ci.yml for the build/test gates).
+on:
+  workflow_dispatch: {}
+
+jobs:
+  package-dmg:
+    name: build ntfsmac.app + dmg
+    runs-on: macos-26 # Apple Silicon (L7 — required, no Intel fallback)
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: swift build -c release
+        run: swift build -c release --package-path "$GITHUB_WORKSPACE"
+
+      - name: build/package-app.sh
+        env:
+          NTFSMAC_SKIP_SWIFT_BUILD: "1" # already built above
+        run: ./build/package-app.sh
+
+      - name: build/make-dmg.sh
+        run: ./build/make-dmg.sh
+
+      - name: Upload dmg
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ntfsmac-dmg
+          path: dist/ntfsmac.dmg
+          if-no-files-found: error

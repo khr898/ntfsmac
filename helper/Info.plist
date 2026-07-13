@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>com.khr898.ntfsmac.helper</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>ntfsmac-helper</string>
+	<key>CFBundlePackageType</key>
+	<string>TOOL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<!--
+	SMJobBless authorizes the *installing app* to bless this helper. Ad-hoc signing (L4) means
+	there is no Team ID / trusted certificate chain to pin, so this only checks the identifier
+	the app itself is signed with — same caveat as verifyClientIdentity() in main.swift.
+	3-first-run-install is the unit that actually drives SMJobBless with this requirement.
+	-->
+	<key>SMAuthorizedClients</key>
+	<array>
+		<string>identifier "com.khr898.ntfsmac"</string>
+	</array>
+</dict>
+</plist>

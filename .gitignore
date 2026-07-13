@@ -1,0 +1,32 @@
+# Build artifacts — never commit vendored binaries/kernels/rootfs
+vendor/bin/
+vendor/kernel/
+vendor/rootfs/
+
+# Distribution artifacts
+*.dmg
+/dist/
+
+# macOS
+.DS_Store
+
+# Rust
+target/
+Cargo.lock.bak
+
+# Go
+/build/build-gvproxy/bin/
+/build/.cache/
+
+# Swift
+.build/
+*.xcodeproj/xcuserdata/
+DerivedData/
+
+# Editors
+.vscode/
+.idea/
+
+# graphify knowledge graph — regenerable (`graphify update .`), and this network volume
+# has known fsync/ioctl issues with git-add on its larger files (see build/AUDIT.md).
+graphify-out/

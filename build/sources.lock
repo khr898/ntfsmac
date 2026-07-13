@@ -1,0 +1,41 @@
+# build/sources.lock — pinned vendored-source versions (PLAN.md §1 vendored-source table, §9).
+# Format: KEY=VALUE, one per line. Comments start with '#'. Consumed by build/lib/lock.sh.
+# Every value here was read from the real upstream source (GitHub API / Docker Hub API) at pin
+# time — never invented. Re-run the fetch commands in each unit's script to re-pin.
+
+# anylinuxfs (submodule) — https://github.com/nohajc/anylinuxfs — pinned to HEAD of default
+# branch at audit time (no upstream release tags exist for this project).
+ANYLINUXFS_COMMIT=8aa9ccd6504e64ca26ce769c1623ed1741c6b7d3
+
+# libkrun (Cargo dependency of anylinuxfs + vmrunner-sys), branch stable-1.19.x.
+# Per PLAN.md §1/CLAUDE.md: exact commit comes from Cargo.lock, not hand-edited here.
+LIBKRUN_BRANCH=stable-1.19.x
+LIBKRUN_COMMIT=SEE_CARGO_LOCK
+
+# libkrunfw — nohajc's fork release (NOT containers/libkrunfw upstream).
+# https://github.com/nohajc/libkrunfw/releases/tag/v6.12.62-rev1
+# Assets actually consumed on macOS/arm64 host per anylinuxfs's own download-dependencies.sh
+# (verified against the real script during v-audit, not guessed): the guest kernel Image
+# archive + modules squashfs. The host-side libkrunfw dylib is a Cargo dependency, not a
+# separately fetched asset.
+LIBKRUNFW_VERSION=v6.12.62-rev1
+LIBKRUNFW_IMAGES_ASSET=linux-aarch64-Images-v6.12.62-anylinuxfs.tar.gz
+LIBKRUNFW_IMAGES_SHA256=1de75a3d4ef2eccd41df10f2eac8435dbaba52371fa42b0b0384fd9cf9a1f3ce
+LIBKRUNFW_MODULES_ASSET=modules.squashfs
+LIBKRUNFW_MODULES_SHA256=86ed485e4e46ba265261a55e25c92ea15f6118003fcec95a8bafde8ad39f697f
+
+# vmnet-helper (Apple-signed, vendored prebuilt) — https://github.com/nirs/vmnet-helper
+VMNET_HELPER_VERSION=v0.12.0
+VMNET_HELPER_ASSET=vmnet-helper.tar.gz
+VMNET_HELPER_SHA256=0f123c29565e36278aca57e13917d3a7db098e8c1552389f9332331c9dfc6381
+
+# gvproxy — built from source per PLAN.md §V (anylinuxfs itself uses a prebuilt "gvproxy-darwin"
+# binary via download-dependencies.sh; ntfsmac builds from source instead — locked decision,
+# not a drift bug). https://github.com/containers/gvisor-tap-vsock, tag v0.8.9.
+GVPROXY_VERSION=v0.8.9
+GVPROXY_COMMIT=9cfc86f66679ef0feed0f20ba1df558fe2bef5c6
+
+# Alpine rootfs base (pulled by init-rootfs via umoci) — Docker Hub library/alpine.
+# Pinned to a specific patch tag + digest, never :latest (L9/HARD-STOP).
+ALPINE_TAG=3.23.5
+ALPINE_DIGEST=sha256:d858bb5442632a31bd4bca6c5e601dbe6b536fd7942092ea6a08a0a95805693c

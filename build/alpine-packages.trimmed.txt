@@ -1,0 +1,9 @@
+bash
+blkid
+cryptsetup
+lsblk
+lvm2
+mount
+nfs-utils
+ntfs-3g
+squashfs-tools

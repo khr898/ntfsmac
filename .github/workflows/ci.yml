@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  shell-tests:
+    name: shellcheck + bats
+    runs-on: macos-14 # arm64 (Apple Silicon) runner — required, no Intel fallback (L7)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install shellcheck + bats-core
+        run: brew install shellcheck bats-core
+      - name: shellcheck
+        run: |
+          find . -name '*.sh' -not -path './vendor/src/*' -print0 \
+            | xargs -0 shellcheck -S warning
+      - name: bats
+        run: tests/run-all.sh
+
+  rust-tests:
+    name: cargo test (vendored crates)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - run: cargo test --manifest-path vendor/src/anylinuxfs/Cargo.toml
+
+  swift-build:
+    name: swift build (GUI)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift build
+      - run: swift test
