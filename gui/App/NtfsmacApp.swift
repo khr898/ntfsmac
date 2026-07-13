@@ -93,13 +93,6 @@ struct NtfsmacApp: App {
             // previously fully decoupled, so a denied/failed helper install left the icon grey.
             HStack(spacing: 3) {
                 StatusIconView(state: helperInstaller.state.isDeniedOrFailed ? .error : appState.state)
-                // Preferences' "Show speed in menu bar" toggle (GUI-PLAN.md) — was persisted to
-                // `Settings` but never read anywhere, a silently-fake control. Only shown once
-                // there's a real, nonzero rate to report, same gating `SpeedBar` already uses.
-                if settings.showSpeedInMenuBar, throughputMonitor.bytesPerSecond > 0 {
-                    Text(ThroughputFormatter.format(throughputMonitor.bytesPerSecond))
-                        .font(.system(size: 11))
-                }
             }
             .task { driveScanner.startPolling() }
             .task(id: helperInstaller.state) {

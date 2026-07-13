@@ -23,10 +23,6 @@ public struct PreferencesView: View {
                 Toggle("", isOn: $settings.launchAtLogin).labelsHidden()
             }
 
-            row("Show speed in menu bar", "Display live throughput next to the icon") {
-                Toggle("", isOn: $settings.showSpeedInMenuBar).labelsHidden()
-            }
-
             Divider()
 
             row("Reinstall privileged helper", "Repair the SMJobBless XPC helper") {

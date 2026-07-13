@@ -16,9 +16,17 @@ extension NSWorkspace: WorkspaceOpening {}
 @MainActor
 public final class FinderOpener {
     private let workspace: any WorkspaceOpening
+    private let runner: any PrivilegedCommandRunning
+    private let anylinuxfsPath: String
 
-    public init(workspace: any WorkspaceOpening = NSWorkspace.shared) {
+    public init(
+        workspace: any WorkspaceOpening = NSWorkspace.shared,
+        runner: any PrivilegedCommandRunning = RealCommandRunner(),
+        anylinuxfsPath: String = "\(installPrefix)/bin/anylinuxfs"
+    ) {
         self.workspace = workspace
+        self.runner = runner
+        self.anylinuxfsPath = anylinuxfsPath
     }
 
     /// GUI-PLAN.md "Popover — mounted" table: "Open in Finder | ... | Mounted". Read-only-dirty
@@ -33,8 +41,25 @@ public final class FinderOpener {
     /// never customized the default, so anylinuxfs picked its own path under `/Volumes/`).
     public func open(_ drive: Drive, state: MountState, mountPoint: String? = nil) {
         guard isEnabled(for: state) else { return }
-        let path = mountPoint ?? Self.mountPoint(for: drive)
-        workspace.open(URL(fileURLWithPath: path))
+        
+        var path = mountPoint
+        
+        if path == nil || path?.isEmpty == true {
+            let result = runner.run(anylinuxfsPath, ["status"])
+            if result.exitCode == 0 {
+                let lines = result.output.components(separatedBy: .newlines)
+                let searchPrefix = "/dev/\(drive.identifier) on "
+                if let statusLine = lines.first(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix(searchPrefix) }) {
+                    if let onRange = statusLine.range(of: " on "),
+                       let parenRange = statusLine.range(of: " (", options: [], range: onRange.upperBound..<statusLine.endIndex) {
+                        path = String(statusLine[onRange.upperBound..<parenRange.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+                    }
+                }
+            }
+        }
+        
+        let finalPath = path ?? Self.mountPoint(for: drive)
+        workspace.open(URL(fileURLWithPath: finalPath))
     }
 
     /// Fallback heuristic for when no real mount point is available (see

@@ -38,9 +38,6 @@ public final class Settings: ObservableObject {
             }
         }
     }
-    @Published public var showSpeedInMenuBar: Bool {
-        didSet { defaults.set(showSpeedInMenuBar, forKey: Keys.showSpeedInMenuBar) }
-    }
 
     private let defaults: UserDefaults
     private let loginService: any LaunchAtLoginService
@@ -50,17 +47,14 @@ public final class Settings: ObservableObject {
         self.loginService = loginService
 
         launchAtLogin = defaults.object(forKey: Keys.launchAtLogin) as? Bool ?? Defaults.launchAtLogin
-        showSpeedInMenuBar = defaults.object(forKey: Keys.showSpeedInMenuBar) as? Bool ?? Defaults.showSpeedInMenuBar
     }
 
     /// GUI-PLAN.md "Preferences window" table's literal Default column.
     public enum Defaults {
         public static let launchAtLogin = false
-        public static let showSpeedInMenuBar = false
     }
 
     private enum Keys {
         static let launchAtLogin = "com.khr898.ntfsmac.settings.launchAtLogin"
-        static let showSpeedInMenuBar = "com.khr898.ntfsmac.settings.showSpeedInMenuBar"
     }
 }

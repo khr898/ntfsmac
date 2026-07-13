@@ -25,7 +25,6 @@ private struct FakeLoginService: LaunchAtLoginService {
     let settings = Settings(defaults: defaults, loginService: FakeLoginService(shouldThrow: false))
 
     #expect(settings.launchAtLogin == false)
-    #expect(settings.showSpeedInMenuBar == false)
 }
 
 @MainActor
@@ -34,12 +33,10 @@ private struct FakeLoginService: LaunchAtLoginService {
     let first = Settings(defaults: defaults, loginService: FakeLoginService(shouldThrow: false))
 
     first.launchAtLogin = true
-    first.showSpeedInMenuBar = true
 
     let second = Settings(defaults: defaults, loginService: FakeLoginService(shouldThrow: false))
 
     #expect(second.launchAtLogin == true)
-    #expect(second.showSpeedInMenuBar == true)
 }
 
 @MainActor
