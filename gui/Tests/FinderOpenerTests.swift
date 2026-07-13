@@ -10,11 +10,6 @@ private let sampleDrive = Drive(identifier: "disk4s2", fsType: "ntfs", label: "M
 
 private final class FakeWorkspace: WorkspaceOpening {
     private(set) var openedPaths: [String] = []
-    private(set) var revealedURLs: [URL] = []
-    
-    func activateFileViewerSelecting(_ fileURLs: [URL]) {
-        revealedURLs.append(contentsOf: fileURLs)
-    }
     
     func openPathInFinder(_ path: String) -> Bool {
         openedPaths.append(path)

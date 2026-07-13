@@ -4,7 +4,6 @@ import HelperShared
 /// Seam over `NSWorkspace` so tests don't drive a real Finder window (same retroactive-
 /// conformance-in-a-new-file pattern as `HelperClient: HelperMounting`).
 public protocol WorkspaceOpening {
-    func activateFileViewerSelecting(_ fileURLs: [URL])
     @discardableResult
     func openPathInFinder(_ path: String) -> Bool
 }
@@ -23,8 +22,10 @@ extension NSWorkspace: WorkspaceOpening {
     }
 }
 
-/// `Open in Finder` (GUI-PLAN.md "Popover — mounted"): reveals the mount point via
-/// `NSWorkspace` — never a shell-out (this unit's Don't clause, e.g. no `open` subprocess).
+/// `Open in Finder` (GUI-PLAN.md "Popover — mounted"): reveals the mount point by
+/// spawning `/usr/bin/open` via `Process` — `NSWorkspace.open(URL)` silently fails on
+/// NFS-mounted volumes (which ntfsmac's vmnet bridge mounts are classified as), so the
+/// subprocess approach is deliberate, not an oversight.
 @MainActor
 public final class FinderOpener {
     private let workspace: any WorkspaceOpening
