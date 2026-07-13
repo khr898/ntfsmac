@@ -39,6 +39,7 @@ public struct PopoverContentView: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var showDiagnose = false
+    @State private var showFDAPrompt = false
 
     public init(
         appState: AppState,
@@ -88,6 +89,26 @@ public struct PopoverContentView: View {
             }
         }
         .task(id: appState.state) { syncThroughputMonitor() }
+        .sheet(isPresented: $showFDAPrompt) {
+            FDAPromptView(
+                onOpenSettings: {
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
+                        NSWorkspace.shared.open(url)
+                    }
+                },
+                onShowInFinder: {
+                    NSWorkspace.shared.selectFile("/Library/PrivilegedHelperTools/com.khr898.ntfsmac.helper", inFileViewerRootedAtPath: "")
+                },
+                onCancel: {
+                    showFDAPrompt = false
+                }
+            )
+        }
+        .onChange(of: mountController.errorMessage) { newValue in
+            if newValue == "FDA_REQUIRED" {
+                showFDAPrompt = true
+            }
+        }
     }
 
     private var mainContent: some View {
@@ -137,7 +158,7 @@ public struct PopoverContentView: View {
                 emptyState
             }
 
-            if let errorMessage = mountController.errorMessage ?? remountController.errorMessage {
+            if let errorMessage = mountController.errorMessage ?? remountController.errorMessage, errorMessage != "FDA_REQUIRED" {
                 Text(errorMessage).font(.caption).foregroundStyle(Color.ntfsRed)
             }
 
@@ -282,3 +303,65 @@ public struct PopoverContentView: View {
         }
     }
 }
+
+/// A beautiful modal prompt guiding the user to grant Full Disk Access to the privileged helper daemon.
+struct FDAPromptView: View {
+    let onOpenSettings: () -> Void
+    let onShowInFinder: () -> Void
+    let onCancel: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        VStack(spacing: 16) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(Color.ntfsYellow.opacity(0.14))
+                        .overlay(Circle().strokeBorder(Color.ntfsYellow.opacity(0.3)))
+                        .frame(width: 40, height: 40)
+                    Image(systemName: "lock.shield.fill")
+                        .font(.system(size: 18))
+                        .foregroundStyle(Color.ntfsYellow)
+                }
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Full Disk Access Required")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text("ntfsmac needs permission to mount drives.")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            
+            Text("To proceed, open System Settings and drag the highlighted **com.khr898.ntfsmac.helper** binary from Finder into the Full Disk Access list.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            
+            HStack(spacing: 8) {
+                Button("Cancel") {
+                    onCancel()
+                }
+                .buttonStyle(.glassNeutral(colorScheme: colorScheme))
+                
+                Spacer()
+                
+                Button("Show in Finder") {
+                    onShowInFinder()
+                }
+                .buttonStyle(.glassNeutral(colorScheme: colorScheme))
+                
+                Button("Open Settings") {
+                    onOpenSettings()
+                }
+                .buttonStyle(.glassPrimary())
+            }
+        }
+        .padding(20)
+        .frame(width: 340)
+        .windowGlassBackground()
+    }
+}
+

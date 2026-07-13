@@ -8,6 +8,10 @@
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>ntfsmac-helper</string>
+	<key>CFBundleDisplayName</key>
+	<string>ntfsmac helper</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundlePackageType</key>
 	<string>TOOL</string>
 	<key>CFBundleShortVersionString</key>

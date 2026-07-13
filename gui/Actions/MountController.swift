@@ -116,7 +116,7 @@ public final class MountController: ObservableObject {
 
     private func fail(_ message: String) {
         if message.contains("Insufficient permissions?") || message.contains("Cannot probe") {
-            errorMessage = "Full Disk Access required for the helper.\n\nPlease open System Settings -> Privacy & Security -> Full Disk Access, click the '+' button, press Cmd+Shift+G, enter:\n/Library/PrivilegedHelperTools/com.khr898.ntfsmac.helper\nand add it to the list."
+            errorMessage = "FDA_REQUIRED"
         } else {
             errorMessage = message
         }
