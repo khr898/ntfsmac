@@ -10,6 +10,12 @@
 # default in case that default ever changes upstream.
 set -u
 
+# GUI helper launches this via XPC/launchd with a minimal environment — HOME is not
+# guaranteed to be set there (unlike an interactive shell). Fall back to the invoking
+# user's real home dir via bash's own tilde expansion (uses the passwd db when HOME is
+# unset), so `set -u` below doesn't crash the mount before it starts.
+: "${HOME:=$(cd ~ && pwd)}"
+
 NFS_MOUNT_LIB_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 # shellcheck source=run-with-progress.sh
 source "$NFS_MOUNT_LIB_DIR/run-with-progress.sh"
