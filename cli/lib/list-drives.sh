@@ -9,8 +9,11 @@ set -u
 LIST_DRIVES_LIB_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 # shellcheck source=run-with-progress.sh
 source "$LIST_DRIVES_LIB_DIR/run-with-progress.sh"
+# shellcheck source=resolve-vendor-bin.sh
+source "$LIST_DRIVES_LIB_DIR/resolve-vendor-bin.sh"
 
-ANYLINUXFS_BIN="${NTFSMAC_ANYLINUXFS_BIN:-anylinuxfs}"
+# See nfs-mount.sh's identical line for why this isn't a bare "anylinuxfs" PATH lookup.
+ANYLINUXFS_BIN="${NTFSMAC_ANYLINUXFS_BIN:-$(resolve_vendor_bin anylinuxfs || echo anylinuxfs)}"
 
 # list_mountable_drives — prints one tab-separated "ident<TAB>label<TAB>size<TAB>fstype" line
 # per compatible partition. Whole-disk/header rows never end in a diskNsM token so they're

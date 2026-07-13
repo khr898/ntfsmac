@@ -11,7 +11,10 @@
 set -u
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
-ANYLINUXFS_BIN="${NTFSMAC_ANYLINUXFS_BIN:-anylinuxfs}"
+# shellcheck source=../lib/resolve-vendor-bin.sh
+source "$SCRIPT_DIR/../lib/resolve-vendor-bin.sh"
+# See cli/lib/nfs-mount.sh's identical line for why this isn't a bare "anylinuxfs" PATH lookup.
+ANYLINUXFS_BIN="${NTFSMAC_ANYLINUXFS_BIN:-$(resolve_vendor_bin anylinuxfs || echo anylinuxfs)}"
 PF_TEARDOWN="$SCRIPT_DIR/../lib/pf-teardown.sh"
 # shellcheck source=../lib/list-drives.sh
 source "$SCRIPT_DIR/../lib/list-drives.sh"

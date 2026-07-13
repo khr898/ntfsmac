@@ -19,8 +19,17 @@ set -u
 NFS_MOUNT_LIB_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 # shellcheck source=run-with-progress.sh
 source "$NFS_MOUNT_LIB_DIR/run-with-progress.sh"
+# shellcheck source=resolve-vendor-bin.sh
+source "$NFS_MOUNT_LIB_DIR/resolve-vendor-bin.sh"
 
-ANYLINUXFS_BIN="${NTFSMAC_ANYLINUXFS_BIN:-anylinuxfs}"
+# Resolved via resolve_vendor_bin (PATH, then $PREFIX/bin, then the homebrew-tap prefix) —
+# never a bare "anylinuxfs" name. That relied on $PATH containing $PREFIX/bin, which the
+# GUI's privileged helper (launchd daemon, minimal system PATH) never has, and which an
+# interactive shell isn't guaranteed to have either — this was the actual cause of "anylinuxfs:
+# command not found" mount failures even once the CLI itself was correctly staged and launched.
+# Falls back to the bare name only if resolution genuinely finds nothing, matching prior
+# (already-broken, not made worse) behavior instead of inventing a new failure mode.
+ANYLINUXFS_BIN="${NTFSMAC_ANYLINUXFS_BIN:-$(resolve_vendor_bin anylinuxfs || echo anylinuxfs)}"
 
 # run_anylinuxfs_mount <device> <fs_driver> [mount_point] [read_only]
 # <device> must already be validate_device()-checked by the caller — this function does
