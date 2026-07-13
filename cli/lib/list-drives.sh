@@ -13,7 +13,7 @@ source "$LIST_DRIVES_LIB_DIR/run-with-progress.sh"
 source "$LIST_DRIVES_LIB_DIR/resolve-vendor-bin.sh"
 
 # See nfs-mount.sh's identical line for why this isn't a bare "anylinuxfs" PATH lookup.
-ANYLINUXFS_BIN="${NTFSMAC_ANYLINUXFS_BIN:-$(resolve_vendor_bin anylinuxfs || echo anylinuxfs)}"
+ANYLINUXFS_BIN="${NTFSMAC_ANYLINUXFS_BIN:-$(resolve_vendor_bin anylinuxfs || true)}"
 
 # list_mountable_drives — prints one tab-separated "ident<TAB>label<TAB>size<TAB>fstype" line
 # per compatible partition. Whole-disk/header rows never end in a diskNsM token so they're
@@ -26,6 +26,11 @@ ANYLINUXFS_BIN="${NTFSMAC_ANYLINUXFS_BIN:-$(resolve_vendor_bin anylinuxfs || ech
 # their generic "no compatible drives found" message in that case — check the exit status,
 # don't just look at whether any lines came back.
 list_mountable_drives() {
+  if [[ -z "$ANYLINUXFS_BIN" ]]; then
+    echo "mount: FATAL — anylinuxfs binary not found at any known install path (try reinstalling: sudo bash install.sh, or 'ntfsmac diagnose')" >&2
+    return 1
+  fi
+
   local line tmp
   # macOS ships bash 3.2 (GPLv2-only cutoff) — its `[[ =~ ]]` parser trips over some literal
   # parens/brackets when the pattern is written inline, so the regex is assigned to a

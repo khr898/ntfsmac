@@ -15,7 +15,7 @@ import Testing
     FileManager.default.createFile(atPath: binPath, contents: Data())
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: binPath)
 
-    let checker = CLIInstallChecker(candidatePaths: [binPath, "/nonexistent/bin/ntfsmac"])
+    let checker = CLIInstallChecker(candidatePaths: [binPath, "/nonexistent/bin/ntfsmac"], anylinuxfsPaths: [binPath])
     checker.check()
     #expect(checker.isInstalled)
 }
@@ -30,13 +30,13 @@ import Testing
 
     // Simulates a brew-tap-only install: the fixed prefix is missing, the homebrew-style
     // candidate is present — this is exactly the case the old single-path check missed.
-    let checker = CLIInstallChecker(candidatePaths: ["/nonexistent/bin/ntfsmac", binPath])
+    let checker = CLIInstallChecker(candidatePaths: ["/nonexistent/bin/ntfsmac", binPath], anylinuxfsPaths: [binPath])
     checker.check()
     #expect(checker.isInstalled)
 }
 
 @MainActor @Test func cliInstallCheckerReportsNotInstalledWhenNoCandidateExists() {
-    let checker = CLIInstallChecker(candidatePaths: ["/nonexistent/bin/ntfsmac", "/also/nonexistent/bin/ntfsmac"])
+    let checker = CLIInstallChecker(candidatePaths: ["/nonexistent/bin/ntfsmac", "/also/nonexistent/bin/ntfsmac"], anylinuxfsPaths: ["/nonexistent/bin/anylinuxfs"])
     checker.check()
     #expect(!checker.isInstalled)
 }

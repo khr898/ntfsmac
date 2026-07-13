@@ -27,9 +27,9 @@ source "$NFS_MOUNT_LIB_DIR/resolve-vendor-bin.sh"
 # GUI's privileged helper (launchd daemon, minimal system PATH) never has, and which an
 # interactive shell isn't guaranteed to have either — this was the actual cause of "anylinuxfs:
 # command not found" mount failures even once the CLI itself was correctly staged and launched.
-# Falls back to the bare name only if resolution genuinely finds nothing, matching prior
-# (already-broken, not made worse) behavior instead of inventing a new failure mode.
-ANYLINUXFS_BIN="${NTFSMAC_ANYLINUXFS_BIN:-$(resolve_vendor_bin anylinuxfs || echo anylinuxfs)}"
+# Fails immediately with a clear diagnostic instead of falling back to a bare name that
+# produces a cryptic "command not found" from run-with-progress.sh at runtime.
+ANYLINUXFS_BIN="${NTFSMAC_ANYLINUXFS_BIN:-$(resolve_vendor_bin anylinuxfs || true)}"
 
 # run_anylinuxfs_mount <device> <fs_driver> [mount_point] [read_only]
 # <device> must already be validate_device()-checked by the caller — this function does
@@ -45,6 +45,11 @@ ANYLINUXFS_BIN="${NTFSMAC_ANYLINUXFS_BIN:-$(resolve_vendor_bin anylinuxfs || ech
 # is deliberately no anylinuxfs/ntfs-3g flag to *request* read-only (confirmed: no `force`
 # or mode field exists on `MountCmd` in cli.rs) — this is the only real lever available.
 run_anylinuxfs_mount() {
+  if [[ -z "$ANYLINUXFS_BIN" ]]; then
+    echo "mount: FATAL — anylinuxfs binary not found at any known install path (try reinstalling: sudo bash install.sh, or 'ntfsmac diagnose')" >&2
+    return 1
+  fi
+
   local device="$1" fs_driver="${2:-}" mount_point="${3:-}" read_only="${4:-}"
   local disk_ident="/dev/${device}"
 

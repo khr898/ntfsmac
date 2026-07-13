@@ -15,6 +15,7 @@ public final class CLIInstallChecker: ObservableObject {
     @Published public private(set) var isInstalled = false
 
     private let candidatePaths: [String]
+    private let anylinuxfsPaths: [String]
     private let fileManager: FileManager
 
     /// Checks every install location the CLI could actually be at (`installPrefix` — install.sh
@@ -22,12 +23,25 @@ public final class CLIInstallChecker: ObservableObject {
     /// policy keeps out of `installPrefix`) — same candidate list `HelperService` resolves
     /// against, so the GUI's "CLI not installed" gate agrees with what the privileged helper
     /// can actually reach.
-    public init(candidatePaths: [String] = ntfsmacCandidatePrefixes.map { "\($0)/bin/ntfsmac" }, fileManager: FileManager = .default) {
+    ///
+    /// `anylinuxfsPaths`: the dispatcher script (`ntfsmac`) alone is not sufficient — mount
+    /// needs the `anylinuxfs` binary to actually do anything. Without this check the UI showed
+    /// the Mount button even when `anylinuxfs` was missing (e.g. `stageCLI` partially failed or
+    /// `removeDependencies` deleted the prefix), producing a cryptic "command not found" shell
+    /// error instead of `CLIMissingView`'s Retry button.
+    public init(
+        candidatePaths: [String] = ntfsmacCandidatePrefixes.map { "\($0)/bin/ntfsmac" },
+        anylinuxfsPaths: [String] = ntfsmacCandidatePrefixes.map { "\($0)/bin/anylinuxfs" },
+        fileManager: FileManager = .default
+    ) {
         self.candidatePaths = candidatePaths
+        self.anylinuxfsPaths = anylinuxfsPaths
         self.fileManager = fileManager
     }
 
     public func check() {
-        isInstalled = candidatePaths.contains { fileManager.isExecutableFile(atPath: $0) }
+        let hasDispatcher = candidatePaths.contains { fileManager.isExecutableFile(atPath: $0) }
+        let hasAnylinuxfs = anylinuxfsPaths.contains { fileManager.isExecutableFile(atPath: $0) }
+        isInstalled = hasDispatcher && hasAnylinuxfs
     }
 }

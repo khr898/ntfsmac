@@ -41,8 +41,8 @@ strip_quarantine() {
 install_binaries() {
   mkdir -p "$PREFIX/bin" "$PREFIX/libexec"
 
-  cp "$REPO_ROOT/vendor/bin/anylinuxfs" "$PREFIX/bin/anylinuxfs"
-  chmod +x "$PREFIX/bin/anylinuxfs"
+  cp "$REPO_ROOT/vendor/bin/anylinuxfs" "$PREFIX/bin/anylinuxfs" || return 1
+  chmod +x "$PREFIX/bin/anylinuxfs" || return 1
   strip_quarantine "$PREFIX/bin/anylinuxfs"
   verify_signature "$PREFIX/bin/anylinuxfs" || return 1
 

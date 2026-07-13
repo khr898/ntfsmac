@@ -25,7 +25,7 @@ final class FakeCLIStaging: CLIStaging {
     FileManager.default.createFile(atPath: binPath, contents: Data())
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: binPath)
 
-    let checker = CLIInstallChecker(candidatePaths: [binPath])
+    let checker = CLIInstallChecker(candidatePaths: [binPath], anylinuxfsPaths: [binPath])
     let helper = FakeCLIStaging()
     let stager = CLIAutoStager(helper: helper, checker: checker, bundleResourcesURL: URL(fileURLWithPath: "/Applications/ntfsmac.app/Contents/Resources"))
 

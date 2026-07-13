@@ -42,7 +42,7 @@ private func makeInstalledDependencies() async throws -> (helperInstaller: Helpe
     let binPath = dir.appendingPathComponent("ntfsmac").path
     FileManager.default.createFile(atPath: binPath, contents: Data())
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: binPath)
-    let checker = CLIInstallChecker(candidatePaths: [binPath])
+    let checker = CLIInstallChecker(candidatePaths: [binPath], anylinuxfsPaths: [binPath])
     checker.check()
     #expect(checker.isInstalled)
 
