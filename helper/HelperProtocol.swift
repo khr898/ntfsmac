@@ -347,23 +347,35 @@ public struct RealCommandRunner: PrivilegedCommandRunning {
 /// treats every caller as hostile regardless of what the GUI/CLI already checked.
 public final class HelperService: NSObject, HelperXPCProtocol {
     private let runner: PrivilegedCommandRunning
-    private let ntfsmacPrefix: String
+    private let resolvePrefix: @Sendable () -> String
     private let expectedCLITreeHash: String
 
-    /// `ntfsmacPrefix` defaults to `resolveNtfsmacPrefix()` so production code always shells
-    /// out to wherever the CLI actually is (fixed prefix or brew tap), while every existing
-    /// test — which never stages a real binary at either candidate — falls through to the
-    /// same `installPrefix` constant it always hardcoded. `expectedCLITreeHash` defaults to the
+    /// `ntfsmacPrefix`, when passed (tests only), pins the CLI location instead of resolving it
+    /// live. Production always passes `nil` so every privileged call below re-runs
+    /// `resolveNtfsmacPrefix()` fresh rather than freezing a snapshot at `HelperService.init`.
+    /// That distinction matters because `main.swift` creates one `HelperService` per XPC
+    /// connection, and the GUI opens several independent connections at launch
+    /// (`MountController`, `RemountController`, `CLIAutoStager`, `HelperInstaller`,
+    /// `HelperUninstaller` each default-construct their own `HelperClient()`) — often before
+    /// first-run CLI staging (`stageCLI`) has finished writing the binary, or before a later
+    /// brew relink/reinstall changes which candidate prefix is live. A snapshot taken at that
+    /// early moment stayed wrong for the connection's entire lifetime with no way to recover
+    /// short of relaunching the GUI. Re-resolving is two cheap `isExecutableFile` stats — worth
+    /// paying on every call to never go stale. `expectedCLITreeHash` defaults to the
     /// build-time-generated manifest so production always checks against what actually shipped
     /// with this binary; tests inject their own known-good hash instead of depending on a real
     /// build having run.
     public init(
         runner: PrivilegedCommandRunning,
-        ntfsmacPrefix: String = resolveNtfsmacPrefix(),
+        ntfsmacPrefix: String? = nil,
         expectedCLITreeHash: String = GeneratedCLIManifest.expectedTreeHashHex
     ) {
         self.runner = runner
-        self.ntfsmacPrefix = ntfsmacPrefix
+        if let ntfsmacPrefix {
+            self.resolvePrefix = { ntfsmacPrefix }
+        } else {
+            self.resolvePrefix = { resolveNtfsmacPrefix() }
+        }
         self.expectedCLITreeHash = expectedCLITreeHash
     }
 
@@ -392,7 +404,7 @@ public final class HelperService: NSObject, HelperXPCProtocol {
         if let mountPoint { args.append(mountPoint) }
         args.append(contentsOf: ["--fs-driver", fsDriver.rawValue])
         if readOnly { args.append("--read-only") }
-        let result = runner.run("\(ntfsmacPrefix)/bin/ntfsmac", ["mount"] + args)
+        let result = runner.run("\(resolvePrefix())/bin/ntfsmac", ["mount"] + args)
         encode(result, reply: reply)
     }
 
@@ -401,7 +413,7 @@ public final class HelperService: NSObject, HelperXPCProtocol {
             reply(nil, "rejected: unmount target \"\(target)\" is neither a valid device nor a /Volumes/ path")
             return
         }
-        let result = runner.run("\(ntfsmacPrefix)/bin/ntfsmac", ["unmount", target])
+        let result = runner.run("\(resolvePrefix())/bin/ntfsmac", ["unmount", target])
         encode(result, reply: reply)
     }
 
@@ -410,7 +422,7 @@ public final class HelperService: NSObject, HelperXPCProtocol {
             reply(nil, "rejected: subnetCIDR \"\(subnetCIDR)\" is not a private /30")
             return
         }
-        let render = runner.run("\(ntfsmacPrefix)/libexec/ntfsmac/lib/pf-anchor.sh", [subnetCIDR])
+        let render = runner.run("\(resolvePrefix())/libexec/ntfsmac/lib/pf-anchor.sh", [subnetCIDR])
         guard render.exitCode == 0 else {
             encode(render, reply: reply)
             return
@@ -426,7 +438,7 @@ public final class HelperService: NSObject, HelperXPCProtocol {
         }
         var args: [String] = []
         if let subnetCIDR { args.append(subnetCIDR) }
-        let result = runner.run("\(ntfsmacPrefix)/libexec/ntfsmac/lib/pf-teardown.sh", args)
+        let result = runner.run("\(resolvePrefix())/libexec/ntfsmac/lib/pf-teardown.sh", args)
         encode(result, reply: reply)
     }
 
@@ -436,7 +448,12 @@ public final class HelperService: NSObject, HelperXPCProtocol {
             return
         }
 
-        _ = runner.run("\(ntfsmacPrefix)/libexec/ntfsmac/lib/pf-teardown.sh", [])
+        // Resolved once and reused for the rest of this call — every path below must agree on
+        // the same prefix within one invocation (reporting one path in `removedPaths` while
+        // deleting another would be its own bug), unlike `mount`/`unmount` which only ever touch
+        // the prefix once each.
+        let prefix = resolvePrefix()
+        _ = runner.run("\(prefix)/libexec/ntfsmac/lib/pf-teardown.sh", [])
 
         // Re-check immediately before the destructive delete, not just once at the top — a
         // concurrent `mount(...)` XPC call could land in the gap between the first check and
@@ -448,8 +465,8 @@ public final class HelperService: NSObject, HelperXPCProtocol {
             return
         }
 
-        var removedPaths = [ntfsmacPrefix]
-        _ = runner.run("/bin/rm", ["-rf", ntfsmacPrefix])
+        var removedPaths = [prefix]
+        _ = runner.run("/bin/rm", ["-rf", prefix])
 
         // install.sh's own PATH convenience (`/usr/local/bin/ntfsmac` -> `installPrefix`/bin/
         // ntfsmac) is never created by the brew tap — brew manages its own `opt/homebrew/bin`
