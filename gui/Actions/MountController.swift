@@ -114,6 +114,10 @@ public final class MountController: ObservableObject {
         }
     }
 
+    public func clearError() {
+        errorMessage = nil
+    }
+
     private func fail(_ message: String) {
         if message.contains("Insufficient permissions?") || message.contains("Cannot probe") {
             errorMessage = "FDA_REQUIRED"

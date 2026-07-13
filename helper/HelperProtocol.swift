@@ -554,6 +554,8 @@ public final class HelperService: NSObject, HelperXPCProtocol {
         // Deleting our own running binary is safe on Unix — the inode stays valid until this
         // process exits.
         let removeBinary = runner.run("/bin/rm", ["-f", "/Library/PrivilegedHelperTools/\(label)"])
+        _ = runner.run("/usr/bin/tccutil", ["reset", "SystemPolicyAllFiles", label])
+        _ = runner.run("/usr/bin/tccutil", ["reset", "All", label])
         encode(removeBinary, reply: reply)
         // `bootout` sends this very process a kill signal and (per its documented semantics)
         // can finish tearing the process down before a reply queued *after* it would ever reach

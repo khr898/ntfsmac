@@ -92,15 +92,15 @@ public struct PopoverContentView: View {
         .sheet(isPresented: $showFDAPrompt) {
             FDAPromptView(
                 onOpenSettings: {
+                    showFDAPrompt = false
+                    mountController.clearError()
                     if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
                         NSWorkspace.shared.open(url)
                     }
                 },
-                onShowInFinder: {
-                    NSWorkspace.shared.selectFile("/Library/PrivilegedHelperTools/com.khr898.ntfsmac.helper", inFileViewerRootedAtPath: "")
-                },
                 onCancel: {
                     showFDAPrompt = false
+                    mountController.clearError()
                 }
             )
         }
@@ -307,7 +307,6 @@ public struct PopoverContentView: View {
 /// A beautiful modal prompt guiding the user to grant Full Disk Access to the privileged helper daemon.
 struct FDAPromptView: View {
     let onOpenSettings: () -> Void
-    let onShowInFinder: () -> Void
     let onCancel: () -> Void
     @Environment(\.colorScheme) private var colorScheme
 
@@ -334,7 +333,7 @@ struct FDAPromptView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             
-            Text("To proceed, open System Settings and drag the highlighted **com.khr898.ntfsmac.helper** binary from Finder into the Full Disk Access list.")
+            Text("To proceed, open System Settings and ensure the **ntfsmac helper** (com.khr898.ntfsmac.helper) is enabled under the Full Disk Access list. If it is not in the list, you can add it manually using the '+' button.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.leading)
@@ -347,11 +346,6 @@ struct FDAPromptView: View {
                 .buttonStyle(.glassNeutral(colorScheme: colorScheme))
                 
                 Spacer()
-                
-                Button("Show in Finder") {
-                    onShowInFinder()
-                }
-                .buttonStyle(.glassNeutral(colorScheme: colorScheme))
                 
                 Button("Open Settings") {
                     onOpenSettings()

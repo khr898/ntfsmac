@@ -282,14 +282,18 @@ private final class MountsAfterFirstCheckRunner: PrivilegedCommandRunning {
     }
     #expect(data != nil)
     #expect(error == nil)
-    #expect(runner.calls.count == 3)
+    #expect(runner.calls.count == 5)
     // rm-plist and rm-binary (and the reply, implicit above) must complete before the
     // self-destructive bootout — reversing this order is the exact race that made every
     // uninstall attempt fail with "can't communicate with helper" on a real machine.
     #expect(runner.calls[0].arguments == ["-f", "/Library/LaunchDaemons/\(helperMachServiceName).plist"])
     #expect(runner.calls[1].arguments == ["-f", "/Library/PrivilegedHelperTools/\(helperMachServiceName)"])
-    #expect(runner.calls[2].executablePath == "/bin/launchctl")
-    #expect(runner.calls[2].arguments == ["bootout", "system/\(helperMachServiceName)"])
+    #expect(runner.calls[2].executablePath == "/usr/bin/tccutil")
+    #expect(runner.calls[2].arguments == ["reset", "SystemPolicyAllFiles", helperMachServiceName])
+    #expect(runner.calls[3].executablePath == "/usr/bin/tccutil")
+    #expect(runner.calls[3].arguments == ["reset", "All", helperMachServiceName])
+    #expect(runner.calls[4].executablePath == "/bin/launchctl")
+    #expect(runner.calls[4].arguments == ["bootout", "system/\(helperMachServiceName)"])
 }
 
 // MARK: - resolveNtfsmacPrefix / ntfsmacPrefix injection (fixed prefix vs brew-tap fallback)

@@ -5,6 +5,8 @@ import HelperShared
 /// conformance-in-a-new-file pattern as `HelperClient: HelperMounting`).
 public protocol WorkspaceOpening {
     func activateFileViewerSelecting(_ fileURLs: [URL])
+    @discardableResult
+    func open(_ url: URL) -> Bool
 }
 
 extension NSWorkspace: WorkspaceOpening {}
@@ -32,7 +34,7 @@ public final class FinderOpener {
     public func open(_ drive: Drive, state: MountState, mountPoint: String? = nil) {
         guard isEnabled(for: state) else { return }
         let path = mountPoint ?? Self.mountPoint(for: drive)
-        workspace.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+        workspace.open(URL(fileURLWithPath: path))
     }
 
     /// Fallback heuristic for when no real mount point is available (see

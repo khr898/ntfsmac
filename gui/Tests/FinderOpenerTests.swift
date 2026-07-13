@@ -8,9 +8,16 @@ import Testing
 private let sampleDrive = Drive(identifier: "disk4s2", fsType: "ntfs", label: "My Drive", size: "500.0 GB")
 
 private final class FakeWorkspace: WorkspaceOpening {
+    private(set) var openedURLs: [URL] = []
     private(set) var revealedURLs: [URL] = []
+    
     func activateFileViewerSelecting(_ fileURLs: [URL]) {
         revealedURLs.append(contentsOf: fileURLs)
+    }
+    
+    func open(_ url: URL) -> Bool {
+        openedURLs.append(url)
+        return true
     }
 }
 
@@ -21,7 +28,7 @@ private final class FakeWorkspace: WorkspaceOpening {
 
     opener.open(sampleDrive, state: .mountedReadWrite)
 
-    #expect(fake.revealedURLs == [URL(fileURLWithPath: "/Volumes/My Drive")])
+    #expect(fake.openedURLs == [URL(fileURLWithPath: "/Volumes/My Drive")])
 }
 
 @MainActor
@@ -31,7 +38,7 @@ private final class FakeWorkspace: WorkspaceOpening {
 
     opener.open(sampleDrive, state: .mountedReadOnlyDirty)
 
-    #expect(fake.revealedURLs.count == 1)
+    #expect(fake.openedURLs.count == 1)
 }
 
 @MainActor
@@ -41,7 +48,7 @@ private final class FakeWorkspace: WorkspaceOpening {
 
     opener.open(sampleDrive, state: .mountedReadWrite, mountPoint: "/Volumes/CustomFolder")
 
-    #expect(fake.revealedURLs == [URL(fileURLWithPath: "/Volumes/CustomFolder")])
+    #expect(fake.openedURLs == [URL(fileURLWithPath: "/Volumes/CustomFolder")])
 }
 
 @MainActor
@@ -52,7 +59,7 @@ private final class FakeWorkspace: WorkspaceOpening {
     #expect(opener.isEnabled(for: .mountedReadOnly))
     opener.open(sampleDrive, state: .mountedReadOnly)
 
-    #expect(fake.revealedURLs.count == 1)
+    #expect(fake.openedURLs.count == 1)
 }
 
 @MainActor
@@ -63,7 +70,7 @@ private final class FakeWorkspace: WorkspaceOpening {
 
     opener.open(unlabeled, state: .mountedReadWrite)
 
-    #expect(fake.revealedURLs == [URL(fileURLWithPath: "/Volumes/disk5s1")])
+    #expect(fake.openedURLs == [URL(fileURLWithPath: "/Volumes/disk5s1")])
 }
 
 @MainActor
@@ -74,7 +81,7 @@ private final class FakeWorkspace: WorkspaceOpening {
     #expect(!opener.isEnabled(for: .idle))
     opener.open(sampleDrive, state: .idle)
 
-    #expect(fake.revealedURLs.isEmpty)
+    #expect(fake.openedURLs.isEmpty)
 }
 
 @MainActor
@@ -87,5 +94,5 @@ private final class FakeWorkspace: WorkspaceOpening {
     opener.open(sampleDrive, state: .mounting)
     opener.open(sampleDrive, state: .error)
 
-    #expect(fake.revealedURLs.isEmpty)
+    #expect(fake.openedURLs.isEmpty)
 }
