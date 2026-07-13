@@ -14,7 +14,7 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 # shellcheck source=../lib/resolve-vendor-bin.sh
 source "$SCRIPT_DIR/../lib/resolve-vendor-bin.sh"
 # See cli/lib/nfs-mount.sh's identical line for why this isn't a bare "anylinuxfs" PATH lookup.
-ANYLINUXFS_BIN="${NTFSMAC_ANYLINUXFS_BIN:-$(resolve_vendor_bin anylinuxfs || echo anylinuxfs)}"
+ANYLINUXFS_BIN="${NTFSMAC_ANYLINUXFS_BIN:-$(resolve_vendor_bin anylinuxfs || true)}"
 PF_TEARDOWN="$SCRIPT_DIR/../lib/pf-teardown.sh"
 # shellcheck source=../lib/list-drives.sh
 source "$SCRIPT_DIR/../lib/list-drives.sh"
@@ -26,6 +26,11 @@ usage() {
 }
 
 cmd_unmount() {
+  if [[ -z "$ANYLINUXFS_BIN" ]]; then
+    echo "unmount: FATAL — anylinuxfs binary not found at any known install path (try reinstalling: sudo bash install.sh, or 'ntfsmac diagnose')" >&2
+    return 1
+  fi
+
   local target="${1:-}"
 
   # No target given: list what's actually mounted instead of just erroring on missing args.
