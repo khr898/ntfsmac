@@ -21,23 +21,14 @@ public enum HelperClientError: Error {
 /// without an `@unchecked Sendable` escape hatch.
 @MainActor
 public final class HelperClient: Sendable {
-    // `nonisolated(unsafe)`: `deinit` can't be `@MainActor`-isolated, and `NSXPCConnection` isn't
-    // `Sendable` — but Apple documents `invalidate()` as safe to call from any thread, so this is
-    // a real, scoped, platform-backed exception, not a blind suppression. Explicit `Sendable` on
-    // the class (added for `StaleHelperDetecting`'s `withTaskGroup`-based timeout in
-    // `HelperInstaller`, which needs to capture a `HelperClient` in a `@Sendable` closure): safe
-    // because every access to `connection` now goes through `currentConnection()`, which takes
-    // `connectionLock` — the lock is the new documented exception, not a new unchecked one.
+    // `nonisolated(unsafe)`: same documented exception as before (`invalidate()` is thread-safe
+    // per Apple's docs); all access now goes through `currentConnection()`, guarded by
+    // `connectionLock`.
     //
-    // Self-healing reconnect: a mach connection created (or first messaged) before the helper
-    // daemon is actually listening — the exact race right after a fresh `SMJobBless`, or the
-    // already-documented "helper reinstalled while the GUI keeps running" case below — can
-    // `invalidate()` itself. Apple's docs: an invalidated `NSXPCConnection` is permanently dead,
-    // never reconnects on its own. Every caller used to share that one dead connection for the
-    // rest of the process, which read as "can't communicate with helper until app restart" even
-    // though a fresh process (a fresh connection) worked immediately. `invalidationHandler` below
-    // flags that, and `currentConnection()` rebuilds a fresh connection the next time anyone
-    // actually calls the helper — no restart needed.
+    // Self-healing: an invalidated NSXPCConnection never reconnects on its own — a connection that
+    // dies right after a fresh SMJobBless (daemon not listening yet) used to stay dead for the
+    // rest of the process, reading as "can't talk to helper until restart." `currentConnection()`
+    // rebuilds it on the next call instead.
     private nonisolated(unsafe) var connection: NSXPCConnection
     private let connectionLock = NSLock()
     private let machServiceName: String
@@ -60,10 +51,8 @@ public final class HelperClient: Sendable {
         return connection
     }
 
-    // Runs on XPC's own internal queue, never the main actor — same reasoning `call()`/`version()`
-    // below already document for their handlers. Only flips a lock-guarded flag; the actual
-    // rebuild happens lazily on the next real call (`currentConnection()`), off this callback's
-    // thread, and only if anyone actually calls the helper again.
+    // Runs on XPC's own queue, not the main actor (same as `call()`/`version()` below). Only flips
+    // a flag; `currentConnection()` does the actual rebuild lazily on the next call.
     private nonisolated func wireInvalidationHandler(on connection: NSXPCConnection) {
         connection.invalidationHandler = { [weak self] in
             guard let self else { return }

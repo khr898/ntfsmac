@@ -26,19 +26,17 @@ public enum PreferencesOpener {
     }
 
     public static func open() {
+        let beforeActivate = Date()
         NSApp.activate(ignoringOtherApps: true)
+        logElapsed("NSApp.activate", since: beforeActivate)
         if let window {
             window.makeKeyAndOrderFront(nil)
             return
         }
         guard let makeContent else { return }
 
-        // Diagnostic only (temporary — remove once the ~5s first-open lag reported live is
-        // localized and fixed): times each step of the cold-start path. No call into
-        // `HelperInstaller`/`HelperClient` happens on this path, so their 5s
-        // `staleCheckTimeoutNanoseconds` is not reachable from here — ruled out by inspection, not
-        // by this logging. Read via `log stream --predicate 'subsystem == "com.khr898.ntfsmac" AND
-        // category == "PreferencesOpener"'` while reproducing.
+        // Diagnostic only, temporary: times the first-open cold-start path to localize the
+        // reported ~5s lag. Read via `log show --predicate 'category == "PreferencesOpener"'`.
         let openStart = Date()
 
         let beforeContent = Date()

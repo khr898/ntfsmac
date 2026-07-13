@@ -28,10 +28,8 @@ public final class CLIAutoStager: ObservableObject {
     private let connectionRetryDelayNanoseconds: UInt64
     private var didAttempt = false
 
-    /// `connectionRetryDelayNanoseconds` injectable same as `HelperInstaller.staleCheckTimeoutNanoseconds`
-    /// — production default is a real ~4s bounded wait for a cold `launchd` daemon spin-up right
-    /// after `SMJobBless`; tests inject a near-zero delay so exercising all
-    /// `connectionRetryAttempts` doesn't make the suite itself slow.
+    /// `connectionRetryDelayNanoseconds` injectable, like `HelperInstaller.staleCheckTimeoutNanoseconds`
+    /// — lets tests use a near-zero delay instead of the real ~4s production wait.
     public init(
         helper: any CLIStaging = HelperClient(),
         checker: CLIInstallChecker,
@@ -67,14 +65,8 @@ public final class CLIAutoStager: ObservableObject {
     /// `install.sh` itself. Safe to blanket-retry any thrown error: `stageCLI` only ever throws
     /// on its own input-validation guards or a broken connection — a real `install.sh` failure
     /// always replies with XPC success (nonzero `exitCode`, handled below, never retried).
-    /// 6 attempts at the (injectable) `connectionRetryDelayNanoseconds` apart — production default
-    /// totals ~4s, matching `HelperInstaller.staleCheckTimeoutNanoseconds`'s existing bounded-wait
-    /// budget for the identical "daemon just blessed, not listening yet" race. The original
-    /// 3×300ms (~900ms) budget was too tight for a cold launchd spin-up (codesign verification +
-    /// first process launch), which surfaced as a permanent "setup incomplete" needing a manual
-    /// Retry or app restart to clear — `HelperClient` now also self-heals a dead connection on
-    /// retry (see its `currentConnection()`), so this is the belt to that fix's suspenders for the
-    /// pure-timing residual.
+    /// 6 attempts, `connectionRetryDelayNanoseconds` apart (~4s total by default) — matches
+    /// `HelperInstaller`'s existing bounded-wait budget for the same cold-daemon-spin-up race.
     private static let connectionRetryAttempts = 6
 
     private func attemptStage() async {
