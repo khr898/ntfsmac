@@ -12,7 +12,6 @@ public struct DriveRow: View {
     public let isDirty: Bool
     public let onMount: () -> Void
     public let onUnmount: () -> Void
-    public let onOpenFinder: (() -> Void)?
     public let onMountAnyway: (() -> Void)?
 
     public init(
@@ -21,7 +20,6 @@ public struct DriveRow: View {
         isDirty: Bool = false,
         onMount: @escaping () -> Void = {},
         onUnmount: @escaping () -> Void = {},
-        onOpenFinder: (() -> Void)? = nil,
         onMountAnyway: (() -> Void)? = nil
     ) {
         self.drive = drive
@@ -29,7 +27,6 @@ public struct DriveRow: View {
         self.isDirty = isDirty
         self.onMount = onMount
         self.onUnmount = onUnmount
-        self.onOpenFinder = onOpenFinder
         self.onMountAnyway = onMountAnyway
     }
 
@@ -65,23 +62,13 @@ public struct DriveRow: View {
             if isMounted {
                 HStack(spacing: 6) {
                     Button {
-                        onOpenFinder?()
-                    } label: {
-                        HStack(spacing: 5) {
-                            FinderGlyph()
-                            Text("Open in Finder")
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.glassNeutral(colorScheme: colorScheme))
-
-                    Button {
                         onUnmount()
                     } label: {
                         HStack(spacing: 5) {
                             EjectGlyph()
                             Text("Unmount")
                         }
+                        .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.glassDestructive(colorScheme: colorScheme))
                 }
@@ -121,7 +108,6 @@ public struct DriveListView: View {
     public let isDirty: Bool
     public let onMount: (Drive) -> Void
     public let onUnmount: (Drive) -> Void
-    public let onOpenFinder: (() -> Void)?
     public let onMountAnyway: (() -> Void)?
 
     public init(
@@ -130,7 +116,6 @@ public struct DriveListView: View {
         isDirty: Bool = false,
         onMount: @escaping (Drive) -> Void = { _ in },
         onUnmount: @escaping (Drive) -> Void = { _ in },
-        onOpenFinder: (() -> Void)? = nil,
         onMountAnyway: (() -> Void)? = nil
     ) {
         self.drives = drives
@@ -138,7 +123,6 @@ public struct DriveListView: View {
         self.isDirty = isDirty
         self.onMount = onMount
         self.onUnmount = onUnmount
-        self.onOpenFinder = onOpenFinder
         self.onMountAnyway = onMountAnyway
     }
 
@@ -150,7 +134,6 @@ public struct DriveListView: View {
                 isDirty: isDirty && drive.id == mountedDriveID,
                 onMount: { onMount(drive) },
                 onUnmount: { onUnmount(drive) },
-                onOpenFinder: onOpenFinder,
                 onMountAnyway: onMountAnyway
             )
         }

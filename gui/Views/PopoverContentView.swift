@@ -138,11 +138,6 @@ public struct PopoverContentView: View {
                     }
                 },
                 onUnmount: { _ in Task { await mountController.unmount() } },
-                onOpenFinder: {
-                    if let mounted = mountController.mountedDrive {
-                        finderOpener.open(mounted, state: appState.state, mountPoint: mountController.mountedMountPoint)
-                    }
-                },
                 onMountAnyway: { remountController.requestRemount() }
             )
 
