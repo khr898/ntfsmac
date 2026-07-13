@@ -75,15 +75,24 @@ install_cli() {
   cp "$REPO_ROOT"/cli/commands/*.sh "$PREFIX/libexec/ntfsmac/commands/" || return 1
   cp "$REPO_ROOT"/cli/lib/*.sh "$PREFIX/libexec/ntfsmac/lib/" || return 1
 
-  # Copy lock.sh and sources.lock so ntfsmac diagnose can verify the kernel pin on installed systems
-  cp "$REPO_ROOT/build/lib/lock.sh" "$PREFIX/libexec/ntfsmac/lib/lock.sh" || return 1
-  cp "$REPO_ROOT/build/sources.lock" "$PREFIX/libexec/ntfsmac/sources.lock" || return 1
+  # Copy lock.sh and sources.lock so ntfsmac diagnose can verify the kernel pin on installed
+  # systems — best-effort only: these are diagnostic-only and their absence must never prevent
+  # the core CLI (mount/unmount) from installing. The files may be absent from older app bundles
+  # that were packaged before build/package-app.sh staged them into cli-src/.
+  if [[ -f "$REPO_ROOT/build/lib/lock.sh" ]]; then
+    cp "$REPO_ROOT/build/lib/lock.sh" "$PREFIX/libexec/ntfsmac/lib/lock.sh" 2>/dev/null || \
+      echo "install.sh: WARN — could not copy build/lib/lock.sh (diagnose kernel-pin check will be unavailable)" >&2
+  fi
+  if [[ -f "$REPO_ROOT/build/sources.lock" ]]; then
+    cp "$REPO_ROOT/build/sources.lock" "$PREFIX/libexec/ntfsmac/sources.lock" 2>/dev/null || \
+      echo "install.sh: WARN — could not copy build/sources.lock (diagnose kernel-pin check will be unavailable)" >&2
+  fi
 
   chmod +x "$PREFIX"/libexec/ntfsmac/commands/*.sh || return 1
-  chmod +x "$PREFIX/libexec/ntfsmac/lib/lock.sh" || return 1
+  [[ -f "$PREFIX/libexec/ntfsmac/lib/lock.sh" ]] && chmod +x "$PREFIX/libexec/ntfsmac/lib/lock.sh"
 
   local f
-  for f in "$PREFIX"/libexec/ntfsmac/commands/*.sh "$PREFIX"/libexec/ntfsmac/lib/*.sh "$PREFIX/libexec/ntfsmac/lib/lock.sh"; do
+  for f in "$PREFIX"/libexec/ntfsmac/commands/*.sh "$PREFIX"/libexec/ntfsmac/lib/*.sh; do
     strip_quarantine "$f"
   done
 
