@@ -10,7 +10,6 @@ private let sampleDrive = Drive(identifier: "disk4s2", fsType: "ntfs", label: "M
 private final class FakeWorkspace: WorkspaceOpening {
     private(set) var openedURLs: [URL] = []
     private(set) var revealedURLs: [URL] = []
-    private(set) var selectedRootPaths: [String] = []
     
     func activateFileViewerSelecting(_ fileURLs: [URL]) {
         revealedURLs.append(contentsOf: fileURLs)
@@ -18,11 +17,6 @@ private final class FakeWorkspace: WorkspaceOpening {
     
     func open(_ url: URL) -> Bool {
         openedURLs.append(url)
-        return true
-    }
-    
-    func selectFile(_ fullPath: String?, inFileViewerRootedAtPath rootPath: String) -> Bool {
-        selectedRootPaths.append(rootPath)
         return true
     }
 }
@@ -34,7 +28,7 @@ private final class FakeWorkspace: WorkspaceOpening {
 
     opener.open(sampleDrive, state: .mountedReadWrite)
 
-    #expect(fake.selectedRootPaths == ["/Volumes/My Drive"])
+    #expect(fake.openedURLs == [URL(fileURLWithPath: "/Volumes/My Drive")])
 }
 
 @MainActor
@@ -44,7 +38,7 @@ private final class FakeWorkspace: WorkspaceOpening {
 
     opener.open(sampleDrive, state: .mountedReadOnlyDirty)
 
-    #expect(fake.selectedRootPaths.count == 1)
+    #expect(fake.openedURLs.count == 1)
 }
 
 @MainActor
@@ -54,7 +48,7 @@ private final class FakeWorkspace: WorkspaceOpening {
 
     opener.open(sampleDrive, state: .mountedReadWrite, mountPoint: "/Volumes/CustomFolder")
 
-    #expect(fake.selectedRootPaths == ["/Volumes/CustomFolder"])
+    #expect(fake.openedURLs == [URL(fileURLWithPath: "/Volumes/CustomFolder")])
 }
 
 @MainActor
@@ -65,7 +59,7 @@ private final class FakeWorkspace: WorkspaceOpening {
     #expect(opener.isEnabled(for: .mountedReadOnly))
     opener.open(sampleDrive, state: .mountedReadOnly)
 
-    #expect(fake.selectedRootPaths.count == 1)
+    #expect(fake.openedURLs.count == 1)
 }
 
 @MainActor
@@ -76,7 +70,7 @@ private final class FakeWorkspace: WorkspaceOpening {
 
     opener.open(unlabeled, state: .mountedReadWrite)
 
-    #expect(fake.selectedRootPaths == ["/Volumes/disk5s1"])
+    #expect(fake.openedURLs == [URL(fileURLWithPath: "/Volumes/disk5s1")])
 }
 
 @MainActor
@@ -87,7 +81,7 @@ private final class FakeWorkspace: WorkspaceOpening {
     #expect(!opener.isEnabled(for: .idle))
     opener.open(sampleDrive, state: .idle)
 
-    #expect(fake.selectedRootPaths.isEmpty)
+    #expect(fake.openedURLs.isEmpty)
 }
 
 @MainActor
@@ -100,5 +94,5 @@ private final class FakeWorkspace: WorkspaceOpening {
     opener.open(sampleDrive, state: .mounting)
     opener.open(sampleDrive, state: .error)
 
-    #expect(fake.selectedRootPaths.isEmpty)
+    #expect(fake.openedURLs.isEmpty)
 }
