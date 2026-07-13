@@ -58,6 +58,11 @@ public final class CLIAutoStager: ObservableObject {
         await attemptStage()
     }
 
+    public func reset() {
+        didAttempt = false
+        lastFailureReason = nil
+    }
+
     /// Bounded retry for the *connection*, not the install: right after a fresh `SMJobBless`,
     /// launchd has registered the job but the daemon process may not be listening yet, so the
     /// very first XPC call here can lose that race and throw a connection-level error (Apple's

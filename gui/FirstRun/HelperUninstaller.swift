@@ -30,9 +30,14 @@ public final class HelperUninstaller: ObservableObject {
     @Published public private(set) var state: HelperUninstallState = .idle
 
     private let client: any HelperUninstalling
+    private let onUninstallComplete: (@MainActor @Sendable () -> Void)?
 
-    public init(client: any HelperUninstalling = HelperClient()) {
+    public init(
+        client: any HelperUninstalling = HelperClient(),
+        onUninstallComplete: (@MainActor @Sendable () -> Void)? = nil
+    ) {
         self.client = client
+        self.onUninstallComplete = onUninstallComplete
     }
 
     public func uninstallEverything() async {
@@ -54,6 +59,7 @@ public final class HelperUninstaller: ObservableObject {
             }
 
             state = .done(depsResult.output)
+            onUninstallComplete?()
         } catch {
             state = .failed(MountController.describe(error))
         }

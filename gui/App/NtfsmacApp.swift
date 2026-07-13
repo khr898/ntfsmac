@@ -13,7 +13,7 @@ struct NtfsmacApp: App {
     @StateObject private var remountController: RemountController
     @StateObject private var diagnoseRunner = DiagnoseRunner()
     @StateObject private var helperInstaller: HelperInstaller
-    @StateObject private var helperUninstaller = HelperUninstaller()
+    @StateObject private var helperUninstaller: HelperUninstaller
     @StateObject private var cliInstallChecker: CLIInstallChecker
     @StateObject private var settings = Settings()
 
@@ -39,13 +39,16 @@ struct NtfsmacApp: App {
             _throughputMonitor = StateObject(wrappedValue: ThroughputMonitor())
         }
 
-        // See `DemoScaffold.swift`: separate axis from `NTFSMAC_UI_DEMO` — orthogonal to mount
+        // See `DemoScaffold.swift`: separate axis from `NTFSMAC_INSTALL_DEMO` — orthogonal to mount
         // state. Inert unless NTFSMAC_INSTALL_DEMO is explicitly set; real installs never set it.
+        let helperInstaller: HelperInstaller
         if let installOutcome = ProcessInfo.processInfo.environment["NTFSMAC_INSTALL_DEMO"] {
-            _helperInstaller = StateObject(wrappedValue: DemoScaffold.helperInstaller(outcome: installOutcome))
+            helperInstaller = DemoScaffold.helperInstaller(outcome: installOutcome)
         } else {
-            _helperInstaller = StateObject(wrappedValue: HelperInstaller())
+            helperInstaller = HelperInstaller()
         }
+        _helperInstaller = StateObject(wrappedValue: helperInstaller)
+
         // `cliAutoStager` needs the *same* `CLIInstallChecker` instance the popover observes, but
         // reading `self.cliInstallChecker` to build it would itself be a `self` read before every
         // stored property (including `cliAutoStager`, which has no default) is assigned — illegal
@@ -55,9 +58,13 @@ struct NtfsmacApp: App {
         _cliInstallChecker = StateObject(wrappedValue: cliInstallChecker)
         _cliAutoStager = StateObject(wrappedValue: CLIAutoStager(checker: cliInstallChecker))
 
+        let helperUninstaller = HelperUninstaller(onUninstallComplete: {
+            helperInstaller.reset()
+            cliInstallChecker.check()
+        })
+        _helperUninstaller = StateObject(wrappedValue: helperUninstaller)
+
         let settings = self.settings
-        let helperInstaller = self.helperInstaller
-        let helperUninstaller = self.helperUninstaller
         PreferencesOpener.configure {
             AnyView(PreferencesView(settings: settings, installer: helperInstaller, uninstaller: helperUninstaller))
         }
@@ -96,6 +103,9 @@ struct NtfsmacApp: App {
             }
             .task { driveScanner.startPolling() }
             .task(id: helperInstaller.state) {
+                if helperInstaller.state == .installing || helperInstaller.state == .notChecked {
+                    cliAutoStager.reset()
+                }
                 guard helperInstaller.state == .installed else { return }
                 await cliAutoStager.stageIfNeeded()
             }

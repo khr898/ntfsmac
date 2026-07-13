@@ -232,6 +232,10 @@ public final class HelperInstaller: ObservableObject {
         await install()
     }
 
+    public func reset() {
+        state = .notChecked
+    }
+
     /// A daemon old enough to predate `version()` entirely doesn't just fail to answer — an XPC
     /// message for a selector the exported interface never declared can leave the reply
     /// continuation unresolved rather than erroring cleanly (the exact hang class `HelperClient`'s
