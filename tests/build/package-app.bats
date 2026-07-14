@@ -14,7 +14,10 @@ setup() {
   # Real Mach-O fixtures (codesign needs a real binary) standing in for the swift-build
   # release output, named exactly what `swift build -c release` would produce.
   cp /bin/echo "$RELEASE_DIR/ntfsmac-gui"
-  cp /bin/cat "$RELEASE_DIR/ntfsmac-helper"
+  local mock_c="$(mktemp).c"
+  printf '#include <stdio.h>\n#include <string.h>\nint main(int argc, char **argv) {\n  if (argc > 1 && strcmp(argv[1], "--print-tree-hash") == 0) {\n    printf("mocktreehash1234567890abcdef123\\n");\n  }\n  return 0;\n}\n' > "$mock_c"
+  clang "$mock_c" -o "$RELEASE_DIR/ntfsmac-helper"
+  rm -f "$mock_c"
   chmod +x "$RELEASE_DIR/ntfsmac-gui" "$RELEASE_DIR/ntfsmac-helper"
 
   export NTFSMAC_SWIFT_RELEASE_DIR="$RELEASE_DIR"
