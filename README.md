@@ -7,7 +7,7 @@ Wraps [`anylinuxfs`](https://github.com/nohajc/anylinuxfs) (a `libkrun` microVM 
 
 ## Why
 
-macOS dropped native NTFS write support years ago. The usual fixes are a kernel extension
+macOS does not have native NTFS write support. The usual fixes are a kernel extension
 (blocked by newer SIP policy) or a paid third-party driver. ntfsmac takes a third path: a
 disposable Linux microVM does the actual NTFS write, and macOS just mounts it over NFS —
 no kext, no SIP toggle, no System Extension approval dance.
@@ -49,10 +49,10 @@ Menu-bar app (no Dock icon): pick a drive, mount it, get out of the way. Menu-ba
 tells the whole story — grey idle, blue mounting, green mounted read/write, yellow mounted
 read-only (dirty journal), red error. Full button-level spec in [GUI-PLAN.md](GUI-PLAN.md).
 
-<!-- Screenshot: menu-bar popover, idle state -->
-<!-- Screenshot: menu-bar popover, mounted state with live speed -->
-<!-- Screenshot: read-only / dirty-journal warning banner -->
-<!-- Screenshot: Preferences window -->
+![Alt Text](docs/screenshots/ss1.jpg)
+![Alt Text](docs/screenshots/ss2.jpg)
+![Alt Text](docs/screenshots/ss3.jpg)
+
 
 ## Architecture
 
