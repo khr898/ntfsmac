@@ -49,9 +49,11 @@ Menu-bar app (no Dock icon): pick a drive, mount it, get out of the way. Menu-ba
 tells the whole story — grey idle, blue mounting, green mounted read/write, yellow mounted
 read-only (dirty journal), red error. Full button-level spec in [GUI-PLAN.md](GUI-PLAN.md).
 
-![Alt Text](docs/screenshots/ss1.jpg)
-![Alt Text](docs/screenshots/ss2.jpg)
-![Alt Text](docs/screenshots/ss3.jpg)
+<p align="center">
+  <img src="docs/screenshots/ss1.jpg" alt="ntfsmac popup screenshot 1" width="30%">&nbsp;&nbsp;
+  <img src="docs/screenshots/ss2.jpg" alt="ntfsmac popup screenshot 2" width="30%">&nbsp;&nbsp;
+  <img src="docs/screenshots/ss3.jpg" alt="ntfsmac popup screenshot 3" width="30%">
+</p>
 
 
 ## Architecture
