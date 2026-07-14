@@ -14,12 +14,18 @@ jobs:
         with:
           submodules: recursive
 
-      - name: swift build -c release
-        run: swift build -c release --package-path "$GITHUB_WORKSPACE"
+      - name: Install build dependencies
+        run: |
+          brew install llvm lld umoci xz util-linux
+          echo "/opt/homebrew/opt/llvm/bin" >> $GITHUB_PATH
 
-      - name: build/package-app.sh
-        env:
-          NTFSMAC_SKIP_SWIFT_BUILD: "1" # already built above
+      - name: Install Rust target
+        run: rustup target add aarch64-unknown-linux-musl
+
+      - name: Build vendored binaries
+        run: ./build/build-all.sh
+
+      - name: Build and package app bundle
         run: ./build/package-app.sh
 
       - name: build/make-dmg.sh
