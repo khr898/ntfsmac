@@ -19,8 +19,15 @@ jobs:
           brew install llvm lld umoci xz util-linux
           echo "/opt/homebrew/opt/llvm/bin" >> $GITHUB_PATH
 
-      - name: Install Rust target
-        run: rustup target add aarch64-unknown-linux-musl
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-musl
 
       - name: Build vendored binaries
         run: ./build/build-all.sh
