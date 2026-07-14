@@ -38,9 +38,21 @@ jobs:
       - name: build/make-dmg.sh
         run: ./build/make-dmg.sh
 
+      - name: Package CLI tarball
+        run: |
+          mkdir -p dist
+          tar -czf dist/ntfsmac-cli.tar.gz install.sh vendor cli build/sources.lock build/lib/lock.sh
+
       - name: Upload dmg
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ntfsmac-dmg
           path: dist/ntfsmac.dmg
+          if-no-files-found: error
+
+      - name: Upload CLI tarball
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ntfsmac-cli
+          path: dist/ntfsmac-cli.tar.gz
           if-no-files-found: error
