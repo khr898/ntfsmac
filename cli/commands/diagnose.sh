@@ -129,24 +129,58 @@ current_mounts() {
   mount -t nfs 2>/dev/null | awk '{print $1, "on", $3}'
 }
 
+# check_macos_version — reports the macOS product version. Two reasons diagnose grew this:
+# (1) triage reports (see README "Troubleshooting" / the issue tracker) kept omitting the OS
+# version, so the first ask on every "installed but not working" report was "which macOS?";
+# (2) ntfsmac requires macOS 13.0+, so an older host is a real cause of that symptom, worth
+# flagging directly. Overridable for tests via NTFSMAC_MACOS_VERSION_OVERRIDE — note the `-`
+# (not `:-`) default: an explicitly-set empty value simulates sw_vers returning nothing
+# (reported as "unknown"), while leaving it unset runs sw_vers normally. bash-3.2 + set -u
+# safe (plain default expansion, no indirect ${!var}).
+check_macos_version() {
+  local ver
+  ver="${NTFSMAC_MACOS_VERSION_OVERRIDE-$(sw_vers -productVersion 2>/dev/null)}"
+  if [[ -n "$ver" ]]; then
+    printf '%s\n' "$ver"
+  else
+    printf 'unknown\n'
+  fi
+}
+
 main() {
   local kernel_pin bridge mounts healthy=1
+  local macos_version macos_major macos_supported=1
   MISSING_BINS=0
   QUARANTINED_BINS=0
 
+  macos_version="$(check_macos_version)"
   check_vendor_binaries
   kernel_pin="$(check_kernel_pin)"
   bridge="$(check_bridge_up)"
   mounts="$(current_mounts)"
+
+  # ntfsmac requires macOS 13.0+ on Apple Silicon. Only a real, parseable major version
+  # below 13 flips health; an unknown/undetected version is reported but left non-fatal.
+  # Portable "is it all digits" test (case glob) instead of a regex — bash-3.2 safe.
+  macos_major="${macos_version%%.*}"
+  case "$macos_major" in
+    ''|*[!0-9]*) macos_major="" ;;
+  esac
+  if [[ -n "$macos_major" && "$macos_major" -lt 13 ]]; then
+    healthy=0
+    macos_supported=0
+  fi
 
   [[ "$MISSING_BINS" -gt 0 ]] && healthy=0
   [[ "$QUARANTINED_BINS" -gt 0 ]] && healthy=0
   [[ "$kernel_pin" == "mismatch" ]] && healthy=0
 
   if [[ $json_mode -eq 1 ]]; then
-    printf '{"healthy":%s,"missing_binaries":%s,"quarantined_binaries":%s,"kernel_pin":"%s","bridge":"%s"}\n' \
-      "$([[ $healthy -eq 1 ]] && echo true || echo false)" "$MISSING_BINS" "$QUARANTINED_BINS" "$kernel_pin" "$bridge"
+    printf '{"healthy":%s,"macos_version":"%s","missing_binaries":%s,"quarantined_binaries":%s,"kernel_pin":"%s","bridge":"%s"}\n' \
+      "$([[ $healthy -eq 1 ]] && echo true || echo false)" "$macos_version" "$MISSING_BINS" "$QUARANTINED_BINS" "$kernel_pin" "$bridge"
   else
+    echo "diagnose: macOS version: $macos_version"
+    [[ "$macos_supported" -eq 0 ]] && echo "diagnose:   unsupported — ntfsmac requires macOS 13.0+"
     echo "diagnose: vendor binaries missing: $MISSING_BINS"
     echo "diagnose: quarantined binaries: $QUARANTINED_BINS"
     echo "diagnose: kernel pin: $kernel_pin"

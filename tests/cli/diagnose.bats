@@ -69,6 +69,40 @@ teardown() {
   [[ "$output" == *'"quarantined_binaries":0'* ]]
 }
 
+@test "reports a supported macOS version and stays healthy" {
+  export NTFSMAC_MACOS_VERSION_OVERRIDE="14.5"
+  run "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"macOS version: 14.5"* ]]
+  [[ "$output" == *"overall: healthy"* ]]
+}
+
+@test "--json includes the macos_version field" {
+  export NTFSMAC_MACOS_VERSION_OVERRIDE="14.5"
+  run "$SCRIPT" --json
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"macos_version":"14.5"'* ]]
+}
+
+@test "degraded: macOS older than 13.0 is unsupported" {
+  export NTFSMAC_MACOS_VERSION_OVERRIDE="12.6"
+  run "$SCRIPT"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"macOS version: 12.6"* ]]
+  [[ "$output" == *"unsupported"* ]]
+  [[ "$output" == *"overall: degraded"* ]]
+}
+
+@test "an undetected macOS version is reported as unknown but not fatal" {
+  # Explicit empty override simulates sw_vers returning nothing (the `-` default in
+  # check_macos_version keeps an empty *set* value rather than re-running sw_vers).
+  export NTFSMAC_MACOS_VERSION_OVERRIDE=""
+  run "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"macOS version: unknown"* ]]
+  [[ "$output" == *"overall: healthy"* ]]
+}
+
 @test "falls back to \$PREFIX/libexec when a binary isn't on PATH (install.sh layout, not PATH by design)" {
   # Real install.sh layout: gvproxy/vmnet-helper/vmproxy live in libexec, never on PATH.
   # Without an env override or PATH entry, the old PATH-only check misreported these as

@@ -43,6 +43,36 @@ ntfsmac help
 Device identifiers are validated against `^disk[0-9]+s[0-9]+$` before any command touches
 them — see [SECURITY.md](SECURITY.md).
 
+## Troubleshooting
+
+Installed but a drive won't mount, or the app "starts but does nothing"? Run the built-in
+health check first — it's read-only and never mounts anything:
+
+```sh
+ntfsmac diagnose          # human-readable
+ntfsmac diagnose --json   # same data on one line, handy for bug reports
+```
+
+What each line means:
+
+| `diagnose` line | Meaning / fix |
+| --- | --- |
+| `macOS version: <ver>` | Must be **13.0+** on Apple Silicon. An `unsupported` note here is fatal — older macOS can't run the microVM path. |
+| `vendor binaries missing: N` (N > 0) | A vendored binary (`anylinuxfs`/`gvproxy`/`vmnet-helper`/`vmproxy`) wasn't found. Reinstall: `brew reinstall ntfsmac`, or re-run `install.sh`. |
+| `quarantined binaries: N` (N > 0) | Gatekeeper quarantined a vendored binary, so it won't launch. Reinstall (the installer strips the xattr), or clear it: `xattr -dr com.apple.quarantine <path>`. |
+| `kernel pin: mismatch` / `missing` | The pinned `modules.squashfs` kernel image doesn't match `sources.lock`. Reinstall to restore the pinned image. |
+| `vmnet bridge: down` | Expected when nothing is mounted; it should read `up` while a volume is mounted. If it stays `down` during a mount, approve the vmnet-helper permission prompt and retry. |
+| `current NFS mounts:` | Lists your mounted volume(s); `(none)` when idle. |
+| `overall: degraded` | One of the fatal checks above failed — fix that line first. |
+
+Filing a bug? Please include:
+
+- the `ntfsmac diagnose --json` output,
+- your macOS version (`sw_vers -productVersion`) and Mac model,
+- the disk identifier you used, in `diskNsN` form (e.g. `disk4s1` — a partition, not the whole `disk4`).
+
+For security issues, see [SECURITY.md](SECURITY.md) — please don't file those publicly.
+
 ## GUI
 
 Menu-bar app (no Dock icon): pick a drive, mount it, get out of the way. Menu-bar icon color
