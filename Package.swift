@@ -65,6 +65,7 @@ let package = Package(
             exclude: ["App", "Resources", "Info.plist", "Tests"],
             sources: [
                 "Helper/HelperClient.swift", "Status/StatusIcon.swift", "State/AppState.swift",
+                "State/SingleInstanceGuard.swift",
                 "Drives/DriveScanner.swift", "Views/DriveRow.swift", "Actions/MountController.swift",
                 "Drives/ThroughputMonitor.swift", "Views/SpeedBar.swift",
                 "Actions/RemountController.swift", "Views/DirtyBanner.swift",

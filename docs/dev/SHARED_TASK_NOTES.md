@@ -676,6 +676,14 @@ units remain in PLAN.md's task list for Phase 3.
   auto-mount-on-detect, only the manual button, which always mounts read-write via ntfs-3g) —
   pre-existing gap in `MountController`'s own public API from `3-mount-unmount`, not this
   changeset's job to fix; flagging again so it isn't lost.
+- **Single-instance GUI guard** — the app delegate now acquires an atomic per-user open-file-
+  description lock before the SwiftUI scene starts running its polling and menu-bar tasks. A
+  forced second launch exits before it can start a concurrent GUI workflow; an unavailable lock
+  fails closed. The implementation uses the public `fcntl(F_OFD_SETLK)` interface available on
+  macOS 13, keeps the lock descriptor close-on-exec, and never touches the helper/XPC privilege
+  boundary. Swift Testing covers lock contention, deterministic/idempotent release, filesystem
+  failures, default path construction, and user-facing errors; line coverage for
+  `SingleInstanceGuard.swift` is 88.46%.
 - **App icon** — `gui/Resources/AppIcon.icns` (+ `AppIcon-source.png`, `gen_icon.py`), wired via
   `Info.plist`'s `CFBundleIconFile`. White external-drive + connect-arrow glyph (reuses this
   project's own already-established icon language — same motif as `ui/prototype.html`'s SVGs and
