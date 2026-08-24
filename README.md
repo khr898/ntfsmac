@@ -244,4 +244,4 @@ Please report vulnerabilities per [SECURITY.md](SECURITY.md) rather than filing 
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+PolyForm Noncommercial License — see [LICENSE](LICENSE.md).
