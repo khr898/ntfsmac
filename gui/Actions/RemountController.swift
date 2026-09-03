@@ -56,6 +56,7 @@ public final class RemountController: ObservableObject {
     @Published public var isConfirmingRemount = false
     @Published public private(set) var isRemounting = false
     @Published public private(set) var errorMessage: String?
+    @Published public private(set) var isAwaitingCredential = false
 
     private let helper: any HelperMounting
     private let readOnlyChecker: any MountReadOnlyChecking
@@ -75,11 +76,13 @@ public final class RemountController: ObservableObject {
     /// this, not `confirmRemount` (acceptance: "remount is gated behind confirm").
     public func requestRemount() {
         guard !isRemounting else { return }
+        isAwaitingCredential = false
         isConfirmingRemount = true
     }
 
     public func cancelRemount() {
         isConfirmingRemount = false
+        isAwaitingCredential = false
     }
 
     /// Only takes effect once `requestRemount()` has actually opened the dialog — protects
@@ -88,9 +91,10 @@ public final class RemountController: ObservableObject {
     /// (double-tap while the first `await` is still in flight) from firing a second privileged
     /// mount RPC for the same device — the same class of race `MountController.mount()` already
     /// guards against.
-    public func confirmRemount(_ drive: Drive, driver: FsDriver? = nil) async {
-        guard isConfirmingRemount, !isRemounting else { return }
+    public func confirmRemount(_ drive: Drive, driver: FsDriver? = nil, recoveryKey: String? = nil) async {
+        guard (isConfirmingRemount || isAwaitingCredential), !isRemounting else { return }
         isConfirmingRemount = false
+        isAwaitingCredential = false
         isRemounting = true
         defer { isRemounting = false }
 
@@ -104,8 +108,14 @@ public final class RemountController: ObservableObject {
             // Always `readOnly: false` — "Mount read/write anyway" is explicitly the user
             // overriding the dirty-journal read-only fallback, never a read-only request.
             let resolvedDriver = driver ?? MountController.driverFor(drive.fsType)
-            let result = try await helper.mount(device: drive.identifier, driver: resolvedDriver, mountPoint: nil, readOnly: false)
+            let result = try await helper.mount(device: drive.identifier, driver: resolvedDriver, mountPoint: nil, readOnly: false, recoveryKey: recoveryKey)
             guard result.exitCode == 0 else {
+                if result.output.contains("BITLOCKER_CREDENTIAL_REQUIRED") {
+                    isAwaitingCredential = true
+                    errorMessage = nil
+                    appState.state = .mountedReadOnlyDirty
+                    return
+                }
                 fail(result.output)
                 return
             }

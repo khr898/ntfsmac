@@ -21,7 +21,7 @@ private let sampleDrive = Drive(identifier: "disk4s2", fsType: "ntfs", label: "M
 private final class FakeHelper: HelperMounting, MountSnapshotProviding {
     var mountResult: Result<CommandResult, Error> = .success(CommandResult(output: "mounted", exitCode: 0))
     private var mounted: [String: ObservedMount] = [:]
-    func mount(device: String, driver: FsDriver, mountPoint: String?, readOnly: Bool) async throws -> CommandResult {
+    func mount(device: String, driver: FsDriver, mountPoint: String?, readOnly: Bool, recoveryKey: String?) async throws -> CommandResult {
         let result = try mountResult.get()
         if result.exitCode == 0 {
             mounted[device] = ObservedMount(
@@ -267,6 +267,26 @@ private func renderPopover(
 
     let size = renderPopover(appState: appState, mountController: controller, helperInstaller: helperInstaller, cliInstallChecker: cliInstallChecker, driveScanner: scanner)
     #expect(size != nil, "idle-with-drives popover (detected drive row + Refresh pill, no 'Other available' label) must render a non-empty image")
+}
+
+@MainActor @Test func bitLockerCredentialOverlayDoesNotResizePopoverWindow() async throws {
+    let (helperInstaller, cliInstallChecker, cleanup) = try await makeInstalledDependencies()
+    defer { cleanup() }
+    let appState = AppState()
+    let fake = FakeHelper()
+    let controller = MountController(helper: fake, appState: appState)
+    let scanner = DriveScanner(runner: SeededListRunner(output: sampleListOutput), anylinuxfsPath: "/stub/anylinuxfs")
+    await scanner.refresh()
+
+    let idleSize = renderPopover(appState: appState, mountController: controller, helperInstaller: helperInstaller, cliInstallChecker: cliInstallChecker, driveScanner: scanner)
+    fake.mountResult = .success(CommandResult(output: "BITLOCKER_CREDENTIAL_REQUIRED", exitCode: 1))
+    await controller.mount(sampleDrive)
+    let promptSize = renderPopover(appState: appState, mountController: controller, helperInstaller: helperInstaller, cliInstallChecker: cliInstallChecker, driveScanner: scanner)
+    controller.dismissCredentialRequest()
+    let cancelledSize = renderPopover(appState: appState, mountController: controller, helperInstaller: helperInstaller, cliInstallChecker: cliInstallChecker, driveScanner: scanner)
+
+    #expect(promptSize == idleSize, "credential UI must be an overlay and never enlarge MenuBarExtra's NSPanel")
+    #expect(cancelledSize == idleSize, "Cancel must leave the popover at its original intrinsic size")
 }
 
 // Mounted with a second unmounted drive available: the "Other available devices" section renders

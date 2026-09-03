@@ -76,6 +76,8 @@ public struct PopoverContentView: View {
     @State private var diagnosePresentation = DiagnosePanelPresentation()
     @State private var securityPresentation = SecurityIndicatorsPresentation()
     @State private var showFDAPrompt = false
+    @State private var bitLockerDrive: Drive?
+    @State private var bitLockerRecoveryKey = ""
 
     public init(
         appState: AppState,
@@ -334,6 +336,13 @@ public struct PopoverContentView: View {
         // panel briefly converges through a larger intermediate size before settling, which
         // reads as "grow then shrink" on every button tap, not just ones that change content.
         .fixedSize(horizontal: false, vertical: true)
+        // MenuBarExtra(.window) does not reliably shrink its NSPanel after a child changes the
+        // root view's intrinsic height. Keep credential UI in an overlay: it gets the existing
+        // popover's proposal and never participates in layout measurement, so Cancel cannot
+        // leave the larger black panel/shadow visible behind the collapsed content.
+        .overlay {
+            bitLockerUnlockOverlay
+        }
     }
 
     /// `ui/prototype.html`'s popover header (icon-box + title/subtitle + status dot) appears in
@@ -368,7 +377,55 @@ public struct PopoverContentView: View {
     /// Mount an unmounted drive r/w at its default mount point. Shared by the idle primary list
     /// and the mounted "Other available devices" section — both offer the same per-row Mount action.
     private func mountDrive(_ drive: Drive) {
-        Task { await mountController.mount(drive, mountPoint: nil, readOnly: false) }
+        if drive.fsType.caseInsensitiveCompare("BitLocker") == .orderedSame {
+            bitLockerRecoveryKey = ""
+            bitLockerDrive = drive
+        } else {
+            Task { await mountController.mount(drive, mountPoint: nil, readOnly: false) }
+        }
+    }
+
+    @ViewBuilder
+    private var bitLockerUnlockOverlay: some View {
+        if let drive = bitLockerDrive ?? driveScanner.drives.first(where: { $0.identifier == mountController.credentialRequiredDeviceID }) {
+            ZStack {
+                Color.black.opacity(0.18)
+                    .contentShape(Rectangle())
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Unlock \(drive.label.isEmpty ? drive.identifier : drive.label)")
+                        .font(.system(size: 13, weight: .semibold))
+                    SecureField("BitLocker password or recovery key", text: $bitLockerRecoveryKey)
+                        .textFieldStyle(.roundedBorder)
+                    HStack {
+                        Button("Cancel") {
+                            bitLockerRecoveryKey = ""
+                            bitLockerDrive = nil
+                            mountController.dismissCredentialRequest()
+                        }
+                        Spacer()
+                        Button("Unlock & Mount") {
+                            let key = bitLockerRecoveryKey.trimmingCharacters(in: .whitespacesAndNewlines)
+                            bitLockerRecoveryKey = ""
+                            bitLockerDrive = nil
+                            Task { await mountController.mount(drive, mountPoint: nil, readOnly: false, recoveryKey: key) }
+                        }
+                        .disabled(bitLockerRecoveryKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+                .padding(14)
+                .frame(width: 270)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color(nsColor: .windowBackgroundColor))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.14))
+                )
+                .shadow(color: .black.opacity(0.28), radius: 14, y: 6)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
     }
 
     private func refreshAll() async {

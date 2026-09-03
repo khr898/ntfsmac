@@ -132,10 +132,10 @@ public final class HelperClient: Sendable {
         }
     }
 
-    public func mount(device: String, driver: FsDriver, mountPoint: String? = nil, readOnly: Bool = false) async throws -> CommandResult {
+    public func mount(device: String, driver: FsDriver, mountPoint: String? = nil, readOnly: Bool = false, recoveryKey: String? = nil) async throws -> CommandResult {
         guard validateDevice(device) else { throw HelperClientError.invalidDevice(device) }
         return try await call { proxy, reply in
-            proxy.mount(device: device, driver: driver.rawValue, mountPoint: mountPoint, readOnly: readOnly, reply: reply)
+            proxy.mount(device: device, driver: driver.rawValue, mountPoint: mountPoint, readOnly: readOnly, recoveryKey: recoveryKey, reply: reply)
         }
     }
 

@@ -26,6 +26,7 @@ public struct DirtyBannerView: View {
     @ObservedObject public var appState: AppState
     @ObservedObject public var remountController: RemountController
     public let drive: Drive
+    @State private var bitLockerCredential = ""
 
     public init(appState: AppState, remountController: RemountController, drive: Drive) {
         self.appState = appState
@@ -35,16 +36,35 @@ public struct DirtyBannerView: View {
 
     public var body: some View {
         if DirtyBanner.isVisible(for: appState.state) {
-            HStack(alignment: .top, spacing: 9) {
-                WarningTriangleGlyph(color: .ntfsYellow)
-                    .padding(.top, 1)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Unclean journal detected")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Color.ntfsYellow.opacity(0.9))
-                    Text(DirtyBanner.bannerCopy)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color.ntfsYellow.opacity(0.62))
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .top, spacing: 9) {
+                    WarningTriangleGlyph(color: .ntfsYellow)
+                        .padding(.top, 1)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Unclean journal detected")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color.ntfsYellow.opacity(0.9))
+                        Text(DirtyBanner.bannerCopy)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.ntfsYellow.opacity(0.62))
+                    }
+                }
+                if remountController.isAwaitingCredential {
+                    SecureField("BitLocker password or recovery key", text: $bitLockerCredential)
+                        .textFieldStyle(.roundedBorder)
+                    HStack {
+                        Button("Cancel") {
+                            bitLockerCredential = ""
+                            remountController.cancelRemount()
+                        }
+                        Spacer()
+                        Button("Unlock & Mount Read/Write") {
+                            let credential = bitLockerCredential.trimmingCharacters(in: .whitespacesAndNewlines)
+                            bitLockerCredential = ""
+                            Task { await remountController.confirmRemount(drive, recoveryKey: credential) }
+                        }
+                        .disabled(bitLockerCredential.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
                 }
             }
             .padding(.horizontal, 12)

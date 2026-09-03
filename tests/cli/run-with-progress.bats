@@ -44,6 +44,26 @@ setup() {
   ! pgrep -f "sleep 30" >/dev/null 2>&1
 }
 
+@test "kills descendants that detach from a TERM-exiting parent" {
+  local marker="$BATS_TEST_TMPDIR/orphan.pid"
+  local fixture="$BATS_TEST_TMPDIR/forking-command.sh"
+  cat > "$fixture" <<'STUB'
+#!/bin/bash
+( trap '' TERM; sleep 30 ) &
+child_pid=$!
+echo "$child_pid" > "$1"
+trap 'exit 0' TERM
+wait
+STUB
+  chmod +x "$fixture"
+
+  run run_with_progress 1 1 "fork-test" - "$fixture" "$marker"
+  [ "$status" -eq 124 ]
+  local child_pid
+  child_pid="$(cat "$marker")"
+  ! kill -0 "$child_pid" 2>/dev/null
+}
+
 @test "prints a heartbeat line while a slow-but-eventually-completing command runs" {
   run run_with_progress 5 1 "test-label" - sleep 2
   [ "$status" -eq 0 ]

@@ -10,12 +10,14 @@ private let sampleDrive = Drive(identifier: "disk4s2", fsType: "ntfs", label: "M
 
 private final class FakeHelper: HelperMounting, MountSnapshotProviding {
     private(set) var mountCalls: [(device: String, driver: FsDriver, mountPoint: String?, readOnly: Bool)] = []
+    private(set) var lastRecoveryKey: String?
     private(set) var unmountCalls: [String] = []
     var mountResult: Result<CommandResult, Error> = .success(CommandResult(output: "mounted", exitCode: 0))
     var unmountResult: Result<CommandResult, Error> = .success(CommandResult(output: "unmounted", exitCode: 0))
     var snapshotReadOnlyOverride: Bool?
 
-    func mount(device: String, driver: FsDriver, mountPoint: String?, readOnly: Bool) async throws -> CommandResult {
+    func mount(device: String, driver: FsDriver, mountPoint: String?, readOnly: Bool, recoveryKey: String?) async throws -> CommandResult {
+        lastRecoveryKey = recoveryKey
         mountCalls.append((device, driver, mountPoint, readOnly))
         return try mountResult.get()
     }
@@ -41,6 +43,17 @@ private final class FakeHelper: HelperMounting, MountSnapshotProviding {
         }.sorted { $0.deviceIdentifier < $1.deviceIdentifier }
         return MountSnapshot(mounts: mounts)
     }
+}
+
+@MainActor
+@Test func bitLockerRecoveryKeyIsThreadedToTheHelper() async {
+    let fake = FakeHelper()
+    let controller = MountController(helper: fake, readOnlyChecker: FakeReadOnlyChecker(isReadOnly: false), appState: AppState())
+    let drive = Drive(identifier: "disk6s1", fsType: "BitLocker", label: "Encrypted", size: "64.0 GB")
+
+    await controller.mount(drive, recoveryKey: "111111-222222-333333-444444-555555-666666-777777-888888")
+
+    #expect(fake.lastRecoveryKey == "111111-222222-333333-444444-555555-666666-777777-888888")
 }
 
 private struct FakeReadOnlyChecker: MountReadOnlyChecking {

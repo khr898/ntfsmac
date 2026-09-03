@@ -11,6 +11,7 @@ final class FakeRunner: PrivilegedCommandRunning {
         var arguments: [String]
     }
     private(set) var calls: [Call] = []
+    private(set) var pipedInputs: [String] = []
     var stubbedResult = CommandResult(output: "ok", exitCode: 0)
 
     func run(_ executablePath: String, _ arguments: [String]) -> CommandResult {
@@ -19,6 +20,7 @@ final class FakeRunner: PrivilegedCommandRunning {
     }
 
     func runPipingStdin(_ input: String, to executablePath: String, _ arguments: [String]) -> CommandResult {
+        pipedInputs.append(input)
         calls.append(Call(executablePath: executablePath, arguments: arguments))
         return stubbedResult
     }
@@ -113,7 +115,7 @@ private func awaitReply(_ body: (@escaping (Data?, String?) -> Void) -> Void) as
     let runner = FakeRunner()
     let service = HelperService(runner: runner)
     let (data, error) = await awaitReply { reply in
-        service.mount(device: "disk2s1; rm -rf /", driver: FsDriver.ntfs3g.rawValue, mountPoint: nil, readOnly: false, reply: reply)
+        service.mount(device: "disk2s1; rm -rf /", driver: FsDriver.ntfs3g.rawValue, mountPoint: nil, readOnly: false, recoveryKey: nil, reply: reply)
     }
     #expect(data == nil)
     #expect(error == "rejected: device \"disk2s1; rm -rf /\" does not match \(deviceNamePattern)")
@@ -124,7 +126,7 @@ private func awaitReply(_ body: (@escaping (Data?, String?) -> Void) -> Void) as
     let runner = FakeRunner()
     let service = HelperService(runner: runner)
     let (data, error) = await awaitReply { reply in
-        service.mount(device: "disk2s1", driver: "ext4", mountPoint: nil, readOnly: false, reply: reply)
+        service.mount(device: "disk2s1", driver: "ext4", mountPoint: nil, readOnly: false, recoveryKey: nil, reply: reply)
     }
     #expect(data == nil)
     #expect(error == "rejected: unknown driver \"ext4\"")
@@ -135,7 +137,7 @@ private func awaitReply(_ body: (@escaping (Data?, String?) -> Void) -> Void) as
     let runner = FakeRunner()
     let service = HelperService(runner: runner)
     let (data, error) = await awaitReply { reply in
-        service.mount(device: "disk2s1", driver: FsDriver.ntfs3g.rawValue, mountPoint: "/Volumes/Data\"; rm -rf /; #", readOnly: false, reply: reply)
+        service.mount(device: "disk2s1", driver: FsDriver.ntfs3g.rawValue, mountPoint: "/Volumes/Data\"; rm -rf /; #", readOnly: false, recoveryKey: nil, reply: reply)
     }
     #expect(data == nil)
     #expect(error != nil)
@@ -146,7 +148,7 @@ private func awaitReply(_ body: (@escaping (Data?, String?) -> Void) -> Void) as
     let runner = FakeRunner()
     let service = HelperService(runner: runner)
     let (data, error) = await awaitReply { reply in
-        service.mount(device: "disk2s1", driver: FsDriver.ntfs3g.rawValue, mountPoint: "/etc/passwd", readOnly: false, reply: reply)
+        service.mount(device: "disk2s1", driver: FsDriver.ntfs3g.rawValue, mountPoint: "/etc/passwd", readOnly: false, recoveryKey: nil, reply: reply)
     }
     #expect(data == nil)
     #expect(error != nil)
@@ -157,24 +159,24 @@ private func awaitReply(_ body: (@escaping (Data?, String?) -> Void) -> Void) as
     let runner = FakeRunner()
     let service = HelperService(runner: runner)
     let (data, error) = await awaitReply { reply in
-        service.mount(device: "disk2s1", driver: FsDriver.ntfs3.rawValue, mountPoint: "/Volumes/Data", readOnly: false, reply: reply)
+        service.mount(device: "disk2s1", driver: FsDriver.ntfs3.rawValue, mountPoint: "/Volumes/Data", readOnly: false, recoveryKey: nil, reply: reply)
     }
     #expect(data != nil)
     #expect(error == nil)
     #expect(runner.calls.count == 1)
     #expect(runner.calls[0].executablePath == "\(installPrefix)/bin/ntfsmac")
-    #expect(runner.calls[0].arguments == ["mount", "disk2s1", "/Volumes/Data", "--fs-driver", "ntfs3"])
+    #expect(runner.calls[0].arguments == ["mount", "disk2s1", "/Volumes/Data", "--fs-driver", "ntfs3", "--credential-required-error"])
 }
 
 @Test func mountAppendsReadOnlyFlagWhenRequested() async {
     let runner = FakeRunner()
     let service = HelperService(runner: runner)
     let (data, error) = await awaitReply { reply in
-        service.mount(device: "disk2s1", driver: FsDriver.ntfs3g.rawValue, mountPoint: nil, readOnly: true, reply: reply)
+        service.mount(device: "disk2s1", driver: FsDriver.ntfs3g.rawValue, mountPoint: nil, readOnly: true, recoveryKey: nil, reply: reply)
     }
     #expect(data != nil)
     #expect(error == nil)
-    #expect(runner.calls[0].arguments == ["mount", "disk2s1", "--fs-driver", "ntfs-3g", "--read-only"])
+    #expect(runner.calls[0].arguments == ["mount", "disk2s1", "--fs-driver", "ntfs-3g", "--read-only", "--credential-required-error"])
 }
 
 @Test func mountExtDriverOmitsFsDriverAndAppendsIgnorePermissions() async {
@@ -184,23 +186,23 @@ private func awaitReply(_ body: (@escaping (Data?, String?) -> Void) -> Void) as
     let runner = FakeRunner()
     let service = HelperService(runner: runner)
     let (data, error) = await awaitReply { reply in
-        service.mount(device: "disk4s1", driver: FsDriver.ext.rawValue, mountPoint: nil, readOnly: false, reply: reply)
+        service.mount(device: "disk4s1", driver: FsDriver.ext.rawValue, mountPoint: nil, readOnly: false, recoveryKey: nil, reply: reply)
     }
     #expect(data != nil)
     #expect(error == nil)
     #expect(runner.calls.count == 1)
-    #expect(runner.calls[0].arguments == ["mount", "disk4s1", "--ignore-permissions"])
+    #expect(runner.calls[0].arguments == ["mount", "disk4s1", "--ignore-permissions", "--credential-required-error"])
 }
 
 @Test func mountExtDriverWithReadOnlyAppendsReadOnlyAfterIgnorePermissions() async {
     let runner = FakeRunner()
     let service = HelperService(runner: runner)
     let (data, error) = await awaitReply { reply in
-        service.mount(device: "disk4s1", driver: FsDriver.ext.rawValue, mountPoint: "/Volumes/Ext", readOnly: true, reply: reply)
+        service.mount(device: "disk4s1", driver: FsDriver.ext.rawValue, mountPoint: "/Volumes/Ext", readOnly: true, recoveryKey: nil, reply: reply)
     }
     #expect(data != nil)
     #expect(error == nil)
-    #expect(runner.calls[0].arguments == ["mount", "disk4s1", "/Volumes/Ext", "--ignore-permissions", "--read-only"])
+    #expect(runner.calls[0].arguments == ["mount", "disk4s1", "/Volumes/Ext", "--ignore-permissions", "--read-only", "--credential-required-error"])
 }
 
 @Test func mountNtfs3gDriverStillPassesFsDriverAndNoIgnorePermissions() async {
@@ -208,9 +210,23 @@ private func awaitReply(_ body: (@escaping (Data?, String?) -> Void) -> Void) as
     let runner = FakeRunner()
     let service = HelperService(runner: runner)
     let (_, _) = await awaitReply { reply in
-        service.mount(device: "disk2s1", driver: FsDriver.ntfs3g.rawValue, mountPoint: nil, readOnly: false, reply: reply)
+        service.mount(device: "disk2s1", driver: FsDriver.ntfs3g.rawValue, mountPoint: nil, readOnly: false, recoveryKey: nil, reply: reply)
     }
-    #expect(runner.calls[0].arguments == ["mount", "disk2s1", "--fs-driver", "ntfs-3g"])
+    #expect(runner.calls[0].arguments == ["mount", "disk2s1", "--fs-driver", "ntfs-3g", "--credential-required-error"])
+}
+
+@Test func bitLockerRecoveryKeyUsesStdinAndNeverArgv() async {
+    let runner = FakeRunner()
+    let service = HelperService(runner: runner)
+    let key = "111111-222222-333333-444444-555555-666666-777777-888888"
+    let (data, error) = await awaitReply { reply in
+        service.mount(device: "disk2s1", driver: FsDriver.ntfs3g.rawValue, mountPoint: nil, readOnly: false, recoveryKey: key, reply: reply)
+    }
+    #expect(data != nil)
+    #expect(error == nil)
+    #expect(runner.pipedInputs == [key + "\n"])
+    #expect(runner.calls[0].arguments == ["mount", "disk2s1", "--fs-driver", "ntfs-3g", "--bitlocker-credential-stdin"])
+    #expect(!runner.calls[0].arguments.contains(key))
 }
 
 @Test func unmountRejectsInvalidTargetWithoutRunningAnything() async {
@@ -368,7 +384,7 @@ private final class UnknownSecurityCleanupRunner: PrivilegedCommandRunning {
     let runner = FakeRunner()
     let service = HelperService(runner: runner, ntfsmacPrefix: homebrewOptPrefix)
     let (data, error) = await awaitReply { reply in
-        service.mount(device: "disk2s1", driver: FsDriver.ntfs3g.rawValue, mountPoint: nil, readOnly: false, reply: reply)
+        service.mount(device: "disk2s1", driver: FsDriver.ntfs3g.rawValue, mountPoint: nil, readOnly: false, recoveryKey: nil, reply: reply)
     }
     #expect(data != nil)
     #expect(error == nil)

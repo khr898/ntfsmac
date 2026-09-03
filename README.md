@@ -66,6 +66,15 @@ ntfsmac uninstall                    # removes CLI, runtime state, and the GUI's
 ntfsmac help
 ```
 
+BitLocker volumes appear in the drive list as `BitLocker`. In the menu-bar app, click
+**Mount**, enter the BitLocker password or 48-digit recovery key, then choose **Unlock & Mount**.
+The credential is used only for that mount and is not saved. For scripted CLI use, pass it on
+standard input so it does not appear in shell history or the process list:
+
+```bash
+printf '%s\n' "$BITLOCKER_CREDENTIAL" | sudo ntfsmac mount --bitlocker-credential-stdin disk4s1
+```
+
 Device identifiers are validated against `^disk[0-9]+s[0-9]+$` before any command touches
 them — see [SECURITY.md](SECURITY.md).
 

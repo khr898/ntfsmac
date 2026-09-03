@@ -179,7 +179,7 @@ public struct CommandResult: Codable, Sendable {
     /// anylinuxfs/ntfs-3g have no mode-request flag of their own (confirmed: no `force`/mode
     /// field on `MountCmd` in the vendored `cli.rs`; ntfs-3g's own dirty-journal check is the
     /// only thing that can *also* force read-only, independent of this flag).
-    func mount(device: String, driver: String, mountPoint: String?, readOnly: Bool, reply: @escaping (Data?, String?) -> Void)
+    func mount(device: String, driver: String, mountPoint: String?, readOnly: Bool, recoveryKey: String?, reply: @escaping (Data?, String?) -> Void)
 
     /// `target` is re-validated against `isValidUnmountTarget` inside the helper.
     func unmount(target: String, reply: @escaping (Data?, String?) -> Void)
@@ -468,7 +468,7 @@ public final class HelperService: NSObject, HelperXPCProtocol {
         reply(data, nil)
     }
 
-    public func mount(device: String, driver: String, mountPoint: String?, readOnly: Bool, reply: @escaping (Data?, String?) -> Void) {
+    public func mount(device: String, driver: String, mountPoint: String?, readOnly: Bool, recoveryKey: String?, reply: @escaping (Data?, String?) -> Void) {
         Self.mutationLock.lock()
         defer { Self.mutationLock.unlock() }
         guard validateDevice(device) else {
@@ -483,6 +483,10 @@ public final class HelperService: NSObject, HelperXPCProtocol {
             reply(nil, "rejected: mountPoint \"\(mountPoint)\" is not a valid /Volumes/ path")
             return
         }
+        if let recoveryKey, recoveryKey.isEmpty || recoveryKey.utf8.count > 256 || recoveryKey.contains("\n") || recoveryKey.contains("\r") {
+            reply(nil, "rejected: invalid BitLocker password or recovery key")
+            return
+        }
         var args = [device]
         if let mountPoint { args.append(mountPoint) }
         if fsDriver == .ext {
@@ -493,7 +497,15 @@ public final class HelperService: NSObject, HelperXPCProtocol {
             args.append(contentsOf: ["--fs-driver", fsDriver.rawValue])
         }
         if readOnly { args.append("--read-only") }
-        let result = runner.run("\(resolvePrefix())/bin/ntfsmac", ["mount"] + args)
+        let executable = "\(resolvePrefix())/bin/ntfsmac"
+        let result: CommandResult
+        if let recoveryKey {
+            args.append("--bitlocker-credential-stdin")
+            result = runner.runPipingStdin(recoveryKey + "\n", to: executable, ["mount"] + args)
+        } else {
+            args.append("--credential-required-error")
+            result = runner.run(executable, ["mount"] + args)
+        }
         encode(result, reply: reply)
     }
 

@@ -6,6 +6,18 @@
 # pattern already used by build/init-rootfs.sh's own VM-boot bound, generalized for reuse.
 set -u
 
+# Signal an exact process tree, children before parent. anylinuxfs forks a session leader for the
+# VM; killing only the wrapper PID leaves that child reparented to launchd, holding the global
+# instance lock forever and making subsequent drive scans appear empty.
+collect_process_tree() {
+  local parent="$1" child
+  while IFS= read -r child; do
+    [[ -n "$child" ]] || continue
+    collect_process_tree "$child"
+  done < <(pgrep -P "$parent" 2>/dev/null || true)
+  process_tree_pids+=("$parent")
+}
+
 # run_with_progress <timeout_secs> <heartbeat_secs> <label> <outfile|-> <cmd...>
 #   <outfile>: capture <cmd>'s stdout there (caller reads it after a 0 return); pass "-" to
 #              let <cmd> inherit this script's real stdout/stderr instead (used for anylinuxfs
@@ -35,9 +47,18 @@ run_with_progress() {
     kill -0 "$pid" 2>/dev/null || break
     elapsed=$((SECONDS - start))
     if [[ $elapsed -ge $timeout_secs ]]; then
-      kill -TERM "$pid" 2>/dev/null
+      # Snapshot descendants before TERM: once an intermediate parent exits, launchd reparents
+      # surviving VM children and a second tree walk can no longer discover them.
+      local -a process_tree_pids=()
+      local process_pid
+      collect_process_tree "$pid"
+      for process_pid in "${process_tree_pids[@]}"; do
+        kill -TERM "$process_pid" 2>/dev/null || true
+      done
       sleep 1
-      kill -KILL "$pid" 2>/dev/null
+      for process_pid in "${process_tree_pids[@]}"; do
+        kill -0 "$process_pid" 2>/dev/null && kill -KILL "$process_pid" 2>/dev/null || true
+      done
       wait "$pid" 2>/dev/null
       echo "$label: no response after ${timeout_secs}s — backend may be wedged (try 'ntfsmac diagnose')" >&2
       return 124

@@ -10,16 +10,39 @@ private let sampleDrive = Drive(identifier: "disk4s2", fsType: "ntfs", label: "M
 
 private final class FakeHelper: HelperMounting {
     private(set) var mountCalls: [String] = []
+    private(set) var recoveryKeys: [String?] = []
     var mountResult: Result<CommandResult, Error> = .success(CommandResult(output: "mounted", exitCode: 0))
 
-    func mount(device: String, driver: FsDriver, mountPoint: String?, readOnly: Bool) async throws -> CommandResult {
+    func mount(device: String, driver: FsDriver, mountPoint: String?, readOnly: Bool, recoveryKey: String?) async throws -> CommandResult {
         mountCalls.append(device)
+        recoveryKeys.append(recoveryKey)
         return try mountResult.get()
     }
 
     func unmount(target: String) async throws -> CommandResult {
         CommandResult(output: "", exitCode: 0)
     }
+}
+
+@MainActor
+@Test func bitLockerDirtyRemountRequestsThenForwardsCredential() async {
+    let fake = FakeHelper()
+    fake.mountResult = .success(CommandResult(output: "BITLOCKER_CREDENTIAL_REQUIRED", exitCode: 1))
+    let appState = AppState()
+    appState.state = .mountedReadOnlyDirty
+    let controller = RemountController(helper: fake, readOnlyChecker: FakeReadOnlyChecker(isReadOnly: false), appState: appState)
+
+    controller.requestRemount()
+    await controller.confirmRemount(sampleDrive)
+    #expect(controller.isAwaitingCredential)
+    #expect(appState.state == .mountedReadOnlyDirty)
+
+    fake.mountResult = .success(CommandResult(output: "mounted", exitCode: 0))
+    await controller.confirmRemount(sampleDrive, recoveryKey: "secret")
+    #expect(fake.recoveryKeys.count == 2)
+    #expect(fake.recoveryKeys[1] == "secret")
+    #expect(!controller.isAwaitingCredential)
+    #expect(appState.state == .mountedReadWrite)
 }
 
 private struct FakeReadOnlyChecker: MountReadOnlyChecking {
@@ -33,7 +56,7 @@ private final class BlockingHelper: HelperMounting {
     private(set) var mountCallCount = 0
     private var continuation: CheckedContinuation<CommandResult, Never>?
 
-    func mount(device: String, driver: FsDriver, mountPoint: String?, readOnly: Bool) async throws -> CommandResult {
+    func mount(device: String, driver: FsDriver, mountPoint: String?, readOnly: Bool, recoveryKey: String?) async throws -> CommandResult {
         mountCallCount += 1
         return await withCheckedContinuation { self.continuation = $0 }
     }

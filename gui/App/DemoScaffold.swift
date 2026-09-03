@@ -67,7 +67,7 @@ private struct DemoCommandRunner: PrivilegedCommandRunning {
 
 private struct DemoHelperMounting: HelperMounting {
     let shouldFail: Bool
-    func mount(device: String, driver: FsDriver, mountPoint: String?, readOnly: Bool) async throws -> CommandResult {
+    func mount(device: String, driver: FsDriver, mountPoint: String?, readOnly: Bool, recoveryKey: String?) async throws -> CommandResult {
         try? await Task.sleep(for: .seconds(1))
         if shouldFail { return CommandResult(output: "demo: mount failed (fake ntfs-3g exit)", exitCode: 1) }
         return CommandResult(output: "mounted", exitCode: 0)

@@ -8,7 +8,7 @@ import HelperShared
 /// `@retroactive` marker is needed.
 @MainActor
 public protocol HelperMounting {
-    func mount(device: String, driver: FsDriver, mountPoint: String?, readOnly: Bool) async throws -> CommandResult
+    func mount(device: String, driver: FsDriver, mountPoint: String?, readOnly: Bool, recoveryKey: String?) async throws -> CommandResult
     func unmount(target: String) async throws -> CommandResult
 }
 
@@ -54,6 +54,7 @@ public final class MountController: ObservableObject {
     @Published public private(set) var mountedDrives: [MountedDrive] = []
     @Published public internal(set) var errorMessage: String?
     @Published public private(set) var reconciliationWarning: String?
+    @Published public private(set) var credentialRequiredDeviceID: String?
 
     private let helper: any HelperMounting
     private let readOnlyChecker: any MountReadOnlyChecking
@@ -130,6 +131,10 @@ public final class MountController: ObservableObject {
     public func stopPolling() {
         pollTask?.cancel()
         pollTask = nil
+    }
+
+    public func dismissCredentialRequest() {
+        credentialRequiredDeviceID = nil
     }
 
     /// Refreshes GUI state from two independent host sources. An authoritative empty snapshot
@@ -210,7 +215,7 @@ public final class MountController: ObservableObject {
     /// from `drive.fsType`: ext-family → `.ext` (helper skips --fs-driver, adds
     /// --ignore-permissions for all_squash), anything else → `.ntfs3g`. An explicit driver
     /// overrides — preserved for a future ntfs3 preference and for tests that pin the value.
-    public func mount(_ drive: Drive, driver: FsDriver? = nil, mountPoint: String? = nil, readOnly: Bool = false) async {
+    public func mount(_ drive: Drive, driver: FsDriver? = nil, mountPoint: String? = nil, readOnly: Bool = false, recoveryKey: String? = nil) async {
         // Do clause: validate the device regex before the call. `HelperClient.mount` already
         // re-validates internally (defense in depth per L6), but that check is invisible to a
         // mocked `HelperMounting` in tests — this guard is what the acceptance criteria
@@ -221,6 +226,7 @@ public final class MountController: ObservableObject {
         }
 
         errorMessage = nil
+        credentialRequiredDeviceID = nil
         reconciliationWarning = nil
         mountOperationsInFlight += 1
         appState.state = .mounting
@@ -232,7 +238,7 @@ public final class MountController: ObservableObject {
         }
         do {
             let resolvedDriver = driver ?? Self.driverFor(drive.fsType)
-            let result = try await helper.mount(device: drive.identifier, driver: resolvedDriver, mountPoint: mountPoint, readOnly: readOnly)
+            let result = try await helper.mount(device: drive.identifier, driver: resolvedDriver, mountPoint: mountPoint, readOnly: readOnly, recoveryKey: recoveryKey)
             if result.exitCode == 0 {
                 let resolvedMountPoint: String?
                 if let mountPoint = mountPoint {
@@ -285,7 +291,12 @@ public final class MountController: ObservableObject {
                 }
                 recomputeAggregateState()
             } else {
-                fail(result.output)
+                if result.output.contains("BITLOCKER_CREDENTIAL_REQUIRED") {
+                    credentialRequiredDeviceID = drive.identifier
+                    recomputeAggregateState()
+                } else {
+                    fail(result.output)
+                }
             }
         } catch {
             fail(Self.describe(error))

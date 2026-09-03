@@ -101,6 +101,52 @@ STUB
   [[ "$output" == *"--nfs-options soft,ro"* ]]
 }
 
+@test "BitLocker recovery key is forwarded through a temporary key file, never argv" {
+  local recovery_key="111111-222222-333333-444444-555555-666666-777777-888888"
+  run "$SCRIPT" --bitlocker-credential-stdin disk2s1 <<< "$recovery_key"
+  [ "$status" -eq 0 ]
+  run cat "$CALL_LOG"
+  [[ "$output" == *"--key-file"* ]]
+  [[ "$output" != *"$recovery_key"* ]]
+  local key_path="${output##*--key-file }"
+  [ ! -e "$key_path" ]
+}
+
+@test "empty BitLocker recovery key is rejected before invoking anylinuxfs" {
+  run "$SCRIPT" --bitlocker-credential-stdin disk2s1 <<< ""
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"invalid or empty BitLocker password or recovery key"* ]]
+  [ ! -f "$CALL_LOG" ]
+}
+
+@test "GUI mode fails closed when the encryption probe fails" {
+  cat > "$STUB_DIR/anylinuxfs" <<'STUB'
+#!/bin/bash
+exit 1
+STUB
+  chmod +x "$STUB_DIR/anylinuxfs"
+  run "$SCRIPT" --credential-required-error disk4s1
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"BITLOCKER_PROBE_FAILED"* ]]
+}
+
+@test "GUI mode returns a credential-required result instead of blocking on BitLocker prompt" {
+  cat > "$STUB_DIR/anylinuxfs" <<STUB
+#!/bin/bash
+if [[ "\$1" == "list" ]]; then
+  echo '   1:                  BitLocker Encrypted                3.0 TB     disk4s1'
+  exit 0
+fi
+echo "\$@" >> "$CALL_LOG"
+exit 0
+STUB
+  chmod +x "$STUB_DIR/anylinuxfs"
+  run "$SCRIPT" --credential-required-error disk4s1
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"BITLOCKER_CREDENTIAL_REQUIRED"* ]]
+  [ ! -f "$CALL_LOG" ]
+}
+
 # Throughput tuning (PLAN.md L8 owner-override, default-on): rsize/wsize/readahead are
 # always appended to --nfs-options — not opt-in. Near-zero risk (transfer-unit size +
 # read-ahead; kernel auto-negotiates down; no integrity path), documented as the explicit
@@ -432,4 +478,3 @@ STUB
   [[ "$output" == *"pinned Alpine runtime metadata is missing"* ]]
   [[ "$output" == *"lock.sh"* ]]
 }
-

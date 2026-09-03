@@ -22,7 +22,8 @@ private final class SuccessfulHelper: HelperMounting {
         device: String,
         driver: FsDriver,
         mountPoint: String?,
-        readOnly: Bool
+        readOnly: Bool,
+        recoveryKey: String?
     ) async throws -> CommandResult {
         CommandResult(
             output: "/dev/\(device) was mounted as \(mountPoint ?? "/Volumes/\(device)")",
@@ -42,7 +43,8 @@ private final class DelayedMountHelper: HelperMounting {
         device: String,
         driver: FsDriver,
         mountPoint: String?,
-        readOnly: Bool
+        readOnly: Bool,
+        recoveryKey: String?
     ) async throws -> CommandResult {
         try await Task.sleep(for: .milliseconds(150))
         return CommandResult(output: "mount failed after delay", exitCode: 1)

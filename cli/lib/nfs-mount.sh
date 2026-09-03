@@ -53,7 +53,7 @@ load_runtime_alpine_contract() {
 # produces a cryptic "command not found" from run-with-progress.sh at runtime.
 ANYLINUXFS_BIN="${NTFSMAC_ANYLINUXFS_BIN:-$(resolve_vendor_bin anylinuxfs || true)}"
 
-# run_anylinuxfs_mount <device> <fs_driver> [mount_point] [read_only] [ignore_perms]
+# run_anylinuxfs_mount <device> <fs_driver> [mount_point] [read_only] [ignore_perms] [key_file]
 # <device> must already be validate_device()-checked by the caller — this function does
 # not re-validate. Only this function ever prepends "/dev/" (L6: raw /dev/-prefixed
 # input is rejected upstream; this is our own controlled construction, not user input).
@@ -81,7 +81,7 @@ run_anylinuxfs_mount() {
     return 1
   fi
 
-  local device="$1" fs_driver="${2:-}" mount_point="${3:-}" read_only="${4:-}" ignore_perms="${5:-}"
+  local device="$1" fs_driver="${2:-}" mount_point="${3:-}" read_only="${4:-}" ignore_perms="${5:-}" key_file="${6:-}"
   local disk_ident="/dev/${device}"
 
   # Validate the exact runtime contract before changing the host's current mount state.
@@ -117,6 +117,7 @@ run_anylinuxfs_mount() {
   args+=(--nfs-options "$nfs_opts")
   [[ -n "$fs_driver" ]] && args+=(-t "$fs_driver")
   [[ -n "$ignore_perms" ]] && args+=(--ignore-permissions)
+  [[ -n "$key_file" ]] && args+=(--key-file "$key_file")
 
   # Bounded + heartbeated (NTFSMAC_MOUNT_TIMEOUT, default 240s — generous: first-run download +
   # VM boot legitimately takes 1-2 min per the notice above, this just bounds a truly wedged
