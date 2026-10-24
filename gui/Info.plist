@@ -22,9 +22,9 @@
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleShortVersionString</key>
-	<string>3.1</string>
+	<string>4.0</string>
 	<key>CFBundleVersion</key>
-	<string>160926</string>
+	<string>241026</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
 	<!-- No Dock icon, no main window — menu-bar agent shape (L7, GUI-PLAN "App shape"). -->
