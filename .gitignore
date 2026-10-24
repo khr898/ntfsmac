@@ -5,7 +5,11 @@ vendor/rootfs/
 
 # Distribution artifacts
 *.dmg
+*.sig
 /dist/
+
+# Local environments & credentials
+.env*
 
 # macOS
 .DS_Store
