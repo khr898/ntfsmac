@@ -209,25 +209,19 @@ public struct PreferencesView: View {
                     Text("System").tag(ProxyMode.system)
                     Text("Custom").tag(ProxyMode.custom)
                 }
-                .pickerStyle(.segmented)
+                .pickerStyle(.menu)
                 .labelsHidden()
-                .frame(width: 140)
                 .accessibilityLabel("Network Proxy")
             }
 
             if settings.proxyMode == .custom {
-                HStack(spacing: 6) {
+                row("Proxy URL", "HTTP, HTTPS, or SOCKS5 address") {
                     TextField("http://127.0.0.1:7890", text: $settings.customProxyURL)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(size: 11))
+                        .frame(width: 140)
                         .accessibilityLabel("Custom Proxy URL")
                 }
-                .padding(.horizontal, 4)
-            } else if settings.proxyMode == .system {
-                Text(settings.detectedSystemProxy.map { "Detected: \($0)" } ?? "No system proxy detected")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 4)
             }
 
             Divider()
@@ -304,9 +298,12 @@ public struct PreferencesView: View {
         case .direct:
             return "Direct connection without a proxy"
         case .system:
-            return "Automatically detect proxy from macOS System Settings"
+            if let detected = settings.detectedSystemProxy {
+                return "Detected: \(detected)"
+            }
+            return "No system proxy detected"
         case .custom:
-            return "Route Alpine setup and updates through a custom proxy URL"
+            return "Route microVM through custom proxy"
         }
     }
 
@@ -425,7 +422,10 @@ public struct PreferencesView: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.system(size: 13, weight: .medium))
-                Text(subtitle).font(.caption).foregroundStyle(.secondary)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
             }
             Spacer()
             control()

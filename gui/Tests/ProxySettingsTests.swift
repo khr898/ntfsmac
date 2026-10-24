@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import SwiftUI
 @testable import NtfsmacGUI
 
 private func makeIsolatedDefaults(_ testName: String) -> UserDefaults {
@@ -121,4 +122,27 @@ private final class DummyLoginService: LaunchAtLoginStatusProviding, @unchecked 
     let content = try String(contentsOf: configFileURL, encoding: .utf8)
     #expect(content.contains("[network]"))
     #expect(content.contains("proxy = \"http://proxy.corp.internal:3128\""))
+}
+
+@MainActor
+@Test func preferencesViewRendersWithAllProxyModes() throws {
+    let defaults = makeIsolatedDefaults(#function)
+    let settings = Settings(defaults: defaults, loginService: DummyLoginService())
+
+    for mode in ProxyMode.allCases {
+        settings.proxyMode = mode
+        if mode == .custom {
+            settings.customProxyURL = "http://127.0.0.1:7890"
+        }
+        let view = PreferencesView(
+            settings: settings,
+            installer: HelperInstaller(),
+            uninstaller: HelperUninstaller(),
+            onBack: {},
+            productVersion: ProductVersion(release: "4.0", build: "241026")
+        )
+        let renderer = ImageRenderer(content: view)
+        #expect(renderer.nsImage?.size.width == 320)
+        #expect((renderer.nsImage?.size.height ?? 0) > 200)
+    }
 }
