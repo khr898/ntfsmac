@@ -707,13 +707,25 @@ main() {
     loopback_proxy|ambiguous|unverified) healthy=0 ;;
   esac
 
+  local network_proxy_url network_proxy_source network_proxy_configured
+  network_proxy_url="$(runtime_alpine_resolve_proxy 2>/dev/null || true)"
+  network_proxy_source="$(runtime_alpine_proxy_source 2>/dev/null || echo "none")"
+  if [[ -n "$network_proxy_url" && "$network_proxy_source" != "none" ]]; then
+    network_proxy_configured=true
+    network_proxy_url="$(runtime_alpine_sanitize_proxy "$network_proxy_url")"
+  else
+    network_proxy_configured=false
+    network_proxy_url=""
+    network_proxy_source="none"
+  fi
+
   if [[ $json_mode -eq 1 ]]; then
     [[ "$healthy" -eq 1 ]] && healthy_json=true || healthy_json=false
     [[ "$helper_installed" -eq 1 ]] && helper_json=true || helper_json=false
     [[ "$vpn_default_route" -eq 1 ]] && vpn_json=true || vpn_json=false
     missing_json="$(component_json_array "$MISSING_COMPONENTS")"
     quarantined_json="$(component_json_array "$QUARANTINED_COMPONENTS")"
-    printf '{"diagnostic_schema":%s,"healthy":%s,"ntfsmac_version":"%s","build_version":"%s","macos_version":"%s","architecture":"%s","helper_installed":%s,"helper_status":"%s","missing_binaries":%s,"missing_components":%s,"quarantined_binaries":%s,"quarantined_components":%s,"kernel_pin":"%s","anylinuxfs_version":"%s","anylinuxfs_expected_version":"%s","anylinuxfs_version_status":"%s","anylinuxfs_source_commit":"%s","vmproxy_source_version":"%s","libkrun_version":"%s","libkrunfw_version":"%s","gvproxy_version":"%s","gvproxy_expected_version":"%s","gvproxy_version_status":"%s","gvproxy_source_commit":"%s","vmnet_helper_version":"%s","vmnet_helper_expected_version":"%s","vmnet_helper_version_status":"%s","vmnet_helper_source_commit":"%s","alpine_runtime_tag":"%s","alpine_runtime_digest":"%s","alpine_runtime_state":"%s","alpine_installed_cache":"%s","alpine_installed_version":"%s","ntfs_3g_version":"%s","nfs_utils_version":"%s","bridge":"%s","network_helper":"%s","nfs_transport_contract":"%s","vpn_default_route":%s,"nfs_mount_count":%s}\n' \
+    printf '{"diagnostic_schema":%s,"healthy":%s,"ntfsmac_version":"%s","build_version":"%s","macos_version":"%s","architecture":"%s","helper_installed":%s,"helper_status":"%s","missing_binaries":%s,"missing_components":%s,"quarantined_binaries":%s,"quarantined_components":%s,"kernel_pin":"%s","anylinuxfs_version":"%s","anylinuxfs_expected_version":"%s","anylinuxfs_version_status":"%s","anylinuxfs_source_commit":"%s","vmproxy_source_version":"%s","libkrun_version":"%s","libkrunfw_version":"%s","gvproxy_version":"%s","gvproxy_expected_version":"%s","gvproxy_version_status":"%s","gvproxy_source_commit":"%s","vmnet_helper_version":"%s","vmnet_helper_expected_version":"%s","vmnet_helper_version_status":"%s","vmnet_helper_source_commit":"%s","alpine_runtime_tag":"%s","alpine_runtime_digest":"%s","alpine_runtime_state":"%s","alpine_installed_cache":"%s","alpine_installed_version":"%s","ntfs_3g_version":"%s","nfs_utils_version":"%s","bridge":"%s","network_helper":"%s","nfs_transport_contract":"%s","vpn_default_route":%s,"nfs_mount_count":%s,"network_proxy_configured":%s,"network_proxy_source":"%s","network_proxy_url":"%s"}\n' \
       "$NTFSMAC_DIAGNOSTIC_SCHEMA_VERSION" "$healthy_json" "$NTFSMAC_VERSION" \
       "$NTFSMAC_BUILD_VERSION" "$macos_version" "$architecture" "$helper_json" "$helper_status" \
       "$MISSING_BINS" "$missing_json" "$QUARANTINED_BINS" "$quarantined_json" \
@@ -726,13 +738,19 @@ main() {
       "$ALPINE_RUNTIME_TAG" "$ALPINE_RUNTIME_DIGEST" "$ALPINE_RUNTIME_STATE" \
       "$ALPINE_INSTALLED_CACHE" "$ALPINE_INSTALLED_VERSION" "$NTFS_3G_VERSION" \
       "$NFS_UTILS_VERSION" "$bridge" "$network_helper" "$nfs_transport_contract" \
-      "$vpn_json" "$mount_count"
+      "$vpn_json" "$mount_count" \
+      "$network_proxy_configured" "$network_proxy_source" "$network_proxy_url"
   else
     echo "diagnose: ntfsmac version: $NTFSMAC_VERSION ($NTFSMAC_BUILD_VERSION)"
     echo "diagnose: macOS version: $macos_version"
     [[ "$macos_supported" -eq 0 ]] && echo "diagnose:   unsupported — ntfsmac requires macOS 13.0+"
     echo "diagnose: architecture: $architecture"
     [[ "$architecture" != "arm64" ]] && echo "diagnose:   unsupported — ntfsmac requires Apple Silicon"
+    if [[ "$network_proxy_configured" == "true" ]]; then
+      echo "diagnose: network proxy: $network_proxy_url (source: $network_proxy_source)"
+    else
+      echo "diagnose: network proxy: direct (none configured)"
+    fi
     case "$helper_status" in
       installed)
         echo "diagnose: privileged helper: installed"

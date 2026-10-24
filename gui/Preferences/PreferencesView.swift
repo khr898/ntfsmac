@@ -203,6 +203,35 @@ public struct PreferencesView: View {
 
             Divider()
 
+            row("Network Proxy", networkProxySubtitle) {
+                Picker("Network Proxy", selection: $settings.proxyMode) {
+                    Text("Direct").tag(ProxyMode.direct)
+                    Text("System").tag(ProxyMode.system)
+                    Text("Custom").tag(ProxyMode.custom)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 140)
+                .accessibilityLabel("Network Proxy")
+            }
+
+            if settings.proxyMode == .custom {
+                HStack(spacing: 6) {
+                    TextField("http://127.0.0.1:7890", text: $settings.customProxyURL)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 11))
+                        .accessibilityLabel("Custom Proxy URL")
+                }
+                .padding(.horizontal, 4)
+            } else if settings.proxyMode == .system {
+                Text(settings.detectedSystemProxy.map { "Detected: \($0)" } ?? "No system proxy detected")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
+            }
+
+            Divider()
+
             row("Reinstall privileged helper", "Repair the SMJobBless XPC helper") {
                 HStack(spacing: 6) {
                     if installer.state == .installing {
@@ -268,6 +297,17 @@ public struct PreferencesView: View {
 
     private var launchAtLoginSubtitle: String {
         settings.launchAtLoginMessage ?? "Start ntfsmac automatically on login"
+    }
+
+    private var networkProxySubtitle: String {
+        switch settings.proxyMode {
+        case .direct:
+            return "Direct connection without a proxy"
+        case .system:
+            return "Automatically detect proxy from macOS System Settings"
+        case .custom:
+            return "Route Alpine setup and updates through a custom proxy URL"
+        }
     }
 
     private var updateTitle: String {

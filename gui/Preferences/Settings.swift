@@ -1,11 +1,18 @@
 import Foundation
 import ServiceManagement
+import CFNetwork
 
 public enum LaunchAtLoginRegistrationStatus: Equatable, Sendable {
     case disabled
     case enabled
     case requiresApproval
     case unavailable
+}
+
+public enum ProxyMode: String, CaseIterable, Sendable {
+    case direct = "Direct"
+    case system = "System"
+    case custom = "Custom"
 }
 
 /// Seam over `SMAppService.mainApp` (macOS 13+, matches L7's floor — not the deprecated
@@ -70,17 +77,38 @@ public final class Settings: ObservableObject {
             defaults.set(preservePrivateRelay, forKey: Keys.preservePrivateRelay)
         }
     }
+    @Published public var proxyMode: ProxyMode {
+        didSet {
+            defaults.set(proxyMode.rawValue, forKey: Keys.proxyMode)
+            syncProxyToConfigFile()
+        }
+    }
+    @Published public var customProxyURL: String {
+        didSet {
+            defaults.set(customProxyURL, forKey: Keys.customProxyURL)
+            if proxyMode == .custom {
+                syncProxyToConfigFile()
+            }
+        }
+    }
+    @Published public private(set) var detectedSystemProxy: String?
     @Published public private(set) var isUpdatingLaunchAtLogin = false
     @Published public private(set) var launchAtLoginMessage: String?
 
     private let defaults: UserDefaults
     private let loginService: any LaunchAtLoginService
+    private let configFileURL: URL?
     private var confirmedLaunchAtLogin: Bool
     private var isApplyingLaunchAtLoginStatus = false
 
-    public init(defaults: UserDefaults = .standard, loginService: any LaunchAtLoginService = RealLaunchAtLoginService()) {
+    public init(
+        defaults: UserDefaults = .standard,
+        loginService: any LaunchAtLoginService = RealLaunchAtLoginService(),
+        configFileURL: URL? = nil
+    ) {
         self.defaults = defaults
         self.loginService = loginService
+        self.configFileURL = configFileURL ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".anylinuxfs/config.toml")
 
         let persisted = defaults.object(forKey: Keys.launchAtLogin) as? Bool ?? Defaults.launchAtLogin
         let registrationStatus = Self.registrationStatus(for: loginService, fallbackEnabled: persisted)
@@ -92,6 +120,14 @@ public final class Settings: ObservableObject {
         defaults.set(initialValue, forKey: Keys.launchAtLogin)
 
         preservePrivateRelay = defaults.object(forKey: Keys.preservePrivateRelay) as? Bool ?? Defaults.preservePrivateRelay
+
+        if let rawMode = defaults.string(forKey: Keys.proxyMode), let mode = ProxyMode(rawValue: rawMode) {
+            proxyMode = mode
+        } else {
+            proxyMode = Defaults.proxyMode
+        }
+        customProxyURL = defaults.string(forKey: Keys.customProxyURL) ?? Defaults.customProxyURL
+        detectedSystemProxy = Self.detectSystemProxy()
     }
 
     /// Updates the real Service Management registration and then reads it back. The explicit
@@ -205,14 +241,129 @@ public final class Settings: ObservableObject {
         }
     }
 
+    public var effectiveProxyURL: String? {
+        switch proxyMode {
+        case .direct:
+            return nil
+        case .system:
+            return detectedSystemProxy
+        case .custom:
+            let trimmed = customProxyURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+    }
+
+    public func refreshSystemProxy() {
+        detectedSystemProxy = Self.detectSystemProxy()
+        if proxyMode == .system {
+            syncProxyToConfigFile()
+        }
+    }
+
+    public func syncProxyToConfigFile() {
+        guard let configFileURL else { return }
+        try? Self.updateConfigFile(at: configFileURL, proxy: effectiveProxyURL)
+    }
+
+    public static func detectSystemProxy() -> String? {
+        guard let settings = CFNetworkCopySystemProxySettings()?.takeRetainedValue() as? [String: Any] else {
+            return nil
+        }
+        if let httpEnable = settings[kCFNetworkProxiesHTTPEnable as String] as? Int, httpEnable == 1,
+           let host = settings[kCFNetworkProxiesHTTPProxy as String] as? String,
+           let port = settings[kCFNetworkProxiesHTTPPort as String] as? Int {
+            return "http://\(host):\(port)"
+        }
+        if let httpsEnable = settings[kCFNetworkProxiesHTTPSEnable as String] as? Int, httpsEnable == 1,
+           let host = settings[kCFNetworkProxiesHTTPSProxy as String] as? String,
+           let port = settings[kCFNetworkProxiesHTTPSPort as String] as? Int {
+            return "http://\(host):\(port)"
+        }
+        if let socksEnable = settings[kCFNetworkProxiesSOCKSEnable as String] as? Int, socksEnable == 1,
+           let host = settings[kCFNetworkProxiesSOCKSProxy as String] as? String,
+           let port = settings[kCFNetworkProxiesSOCKSPort as String] as? Int {
+            return "socks5://\(host):\(port)"
+        }
+        return nil
+    }
+
+    public static func updateConfigFile(at url: URL, proxy: String?) throws {
+        let dir = url.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        var content = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        if content.isEmpty && (proxy == nil || proxy?.isEmpty == true) {
+            return
+        }
+
+        if let proxy = proxy, !proxy.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let sanitized = proxy.trimmingCharacters(in: .whitespacesAndNewlines)
+            if content.contains("[network]") {
+                let lines = content.components(separatedBy: "\n")
+                var newLines: [String] = []
+                var inNetwork = false
+                var replaced = false
+                for line in lines {
+                    let trimmed = line.trimmingCharacters(in: .whitespaces)
+                    if trimmed.hasPrefix("[") {
+                        if inNetwork && !replaced {
+                            newLines.append("proxy = \"\(sanitized)\"")
+                            replaced = true
+                        }
+                        inNetwork = (trimmed == "[network]")
+                        newLines.append(line)
+                    } else if inNetwork && trimmed.hasPrefix("proxy") && trimmed.contains("=") {
+                        newLines.append("proxy = \"\(sanitized)\"")
+                        replaced = true
+                    } else {
+                        newLines.append(line)
+                    }
+                }
+                if inNetwork && !replaced {
+                    newLines.append("proxy = \"\(sanitized)\"")
+                }
+                content = newLines.joined(separator: "\n")
+            } else {
+                if !content.isEmpty && !content.hasSuffix("\n") {
+                    content += "\n"
+                }
+                content += "\n[network]\nproxy = \"\(sanitized)\"\n"
+            }
+        } else {
+            if content.contains("[network]") {
+                let lines = content.components(separatedBy: "\n")
+                var newLines: [String] = []
+                var inNetwork = false
+                for line in lines {
+                    let trimmed = line.trimmingCharacters(in: .whitespaces)
+                    if trimmed.hasPrefix("[") {
+                        inNetwork = (trimmed == "[network]")
+                        newLines.append(line)
+                    } else if inNetwork && trimmed.hasPrefix("proxy") && trimmed.contains("=") {
+                        // skip
+                    } else {
+                        newLines.append(line)
+                    }
+                }
+                content = newLines.joined(separator: "\n")
+            }
+        }
+
+        try content.write(to: url, atomically: true, encoding: .utf8)
+    }
+
     /// GUI-PLAN.md "Settings page" table's literal Default column.
     public enum Defaults {
         public static let launchAtLogin = false
         public static let preservePrivateRelay = false
+        public static let proxyMode = ProxyMode.direct
+        public static let customProxyURL = ""
     }
 
     private enum Keys {
         static let launchAtLogin = "com.khr898.ntfsmac.settings.launchAtLogin"
         static let preservePrivateRelay = "com.khr898.ntfsmac.settings.preservePrivateRelay"
+        static let proxyMode = "com.khr898.ntfsmac.settings.proxyMode"
+        static let customProxyURL = "com.khr898.ntfsmac.settings.customProxyURL"
     }
 }
