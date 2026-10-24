@@ -19,6 +19,7 @@ are already built into the vendored kernel image.
 
 ## What's new
 
+- **Network proxy configuration (GUI & CLI)** — configure Direct, System, or Custom HTTP/HTTPS/SOCKS5 proxies for microVM setup, OCI downloads, and guest package updates. Supports automatic macOS System Settings detection via `scutil`, `install.sh --proxy`, and environment variables with automatic credential masking.
 - **In-app software updates (GUI)** — check for updates directly within the GUI Settings window, stream download progress, verify bundle integrity, and relaunch seamlessly with active-mount protection.
 - **Pre-installed Alpine runtime for instant first mount** — the installer pre-provisions and configures the Alpine Linux microVM runtime upfront, eliminating first-mount download wait times.
 - **Proactive Full Disk Access guidance** — automated FDA detection immediately guides helper permissions post-setup and in diagnostics before permission errors occur.
@@ -120,6 +121,35 @@ Device identifiers are validated against `^disk[0-9]+(s[0-9]+)?$` before any com
 them — supporting both sliced partitions (`disk4s1`) and unpartitioned whole-disk volumes
 (`disk4`, such as BitLocker To Go USB flash drives) — see [SECURITY.md](SECURITY.md).
 
+### Network Proxy Configuration (GUI & CLI)
+
+For corporate networks, VPNs, or environments with restricted internet access, ntfsmac can route microVM downloads and package provisioning through a network proxy:
+
+- **In the GUI**:
+  1. Open **Settings** (gear icon) in the menu-bar popover.
+  2. Under **Network Proxy**, choose your desired mode:
+     - **Direct**: Connect directly without a proxy.
+     - **System**: Automatically detect HTTP/HTTPS/SOCKS proxy configuration from macOS System Settings.
+     - **Custom**: Enter a custom proxy URL (e.g. `http://127.0.0.1:7890` or `http://user:pass@proxy.example.com:8080`).
+  3. Settings synchronize atomically to `~/.anylinuxfs/config.toml` under `[network]` and apply automatically to microVM operations.
+  4. If first-run microVM initialization encounters connectivity issues, the setup view provides an immediate action to configure your proxy and retry.
+
+- **In the CLI & Installer**:
+  - Pass `--proxy` during installation:
+    ```sh
+    sudo bash install.sh --proxy http://127.0.0.1:7890
+    ```
+  - Or set standard proxy environment variables in your shell:
+    ```sh
+    export NTFSMAC_PROXY="http://127.0.0.1:7890"
+    # Or HTTP_PROXY / HTTPS_PROXY / ALL_PROXY
+    ```
+  - Check active proxy configuration anytime with `ntfsmac diagnose`:
+    ```text
+    diagnose: network proxy: http://127.0.0.1:7890 (source: config)
+    ```
+    Sensitive credentials in proxy URLs are automatically masked (`***`) across terminal outputs and JSON diagnostics.
+
 ## Troubleshooting
 
 Installed but a drive won't mount, or the app "starts but does nothing"? Run the built-in
@@ -142,6 +172,7 @@ What each line means:
 | --- | --- |
 | `ntfsmac version: <release> (<build>)` | Identifies the exact app/CLI build that produced the report. The same value appears below the Settings title. |
 | `macOS version: <ver>` / `architecture: <arch>` | Must be **13.0+** and `arm64`. An `unsupported` note is fatal. |
+| `network proxy: <url> (source: <source>)` | Reports active network proxy configuration (`direct`, `system`, `config`, or `environment`) with credentials masked. |
 | `privileged helper: installed` | Required by the GUI for privileged mount/network operations. A CLI-only installation can legitimately report `not installed`. |
 | `vendor binaries missing: N` (N > 0) | A vendored binary (`anylinuxfs`/`gvproxy`/`vmnet-helper`/`vmproxy`) wasn't found. Reinstall: `brew reinstall ntfsmac`, or re-run `install.sh`. |
 | `quarantined binaries: N` (N > 0) | Gatekeeper quarantined a vendored binary, so it won't launch. Reinstall (the installer strips the xattr), or clear it: `xattr -dr com.apple.quarantine <path>`. |
