@@ -11,6 +11,7 @@ setup() {
     "$FIXTURE/etc" "$FIXTURE/share/alpine"
   cp "$REPO_ROOT/vendor/src/anylinuxfs/anylinuxfs/src/settings.rs" "$FIXTURE/anylinuxfs/src/settings.rs"
   cp "$REPO_ROOT/vendor/src/anylinuxfs/anylinuxfs/src/vm_image.rs" "$FIXTURE/anylinuxfs/src/vm_image.rs"
+  cp "$REPO_ROOT/vendor/src/anylinuxfs/anylinuxfs/src/main.rs" "$FIXTURE/anylinuxfs/src/main.rs"
   cp "$REPO_ROOT/vendor/src/anylinuxfs/anylinuxfs/Cargo.toml" "$FIXTURE/anylinuxfs/Cargo.toml"
   cp "$REPO_ROOT/vendor/src/anylinuxfs/vmproxy/Cargo.toml" "$FIXTURE/vmproxy/Cargo.toml"
   cp "$REPO_ROOT/vendor/src/anylinuxfs/init-rootfs/main.go" "$FIXTURE/init-rootfs/main.go"

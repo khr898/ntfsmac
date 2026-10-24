@@ -196,3 +196,144 @@ runtime_alpine_prepare_cache() {
       ;;
   esac
 }
+
+runtime_alpine_detect_system_proxy() {
+  local scutil_out http_en http_host http_port
+  scutil_out="$(scutil --proxy 2>/dev/null || true)"
+  [[ -z "$scutil_out" ]] && return 1
+
+  http_en="$(echo "$scutil_out" | awk '/HTTPEnable :/ {print $3}')"
+  if [[ "$http_en" == "1" ]]; then
+    http_host="$(echo "$scutil_out" | awk '/HTTPProxy :/ {print $3}')"
+    http_port="$(echo "$scutil_out" | awk '/HTTPPort :/ {print $3}')"
+    if [[ -n "$http_host" && -n "$http_port" ]]; then
+      printf 'http://%s:%s\n' "$http_host" "$http_port"
+      return 0
+    fi
+  fi
+
+  local https_en https_host https_port
+  https_en="$(echo "$scutil_out" | awk '/HTTPSEnable :/ {print $3}')"
+  if [[ "$https_en" == "1" ]]; then
+    https_host="$(echo "$scutil_out" | awk '/HTTPSProxy :/ {print $3}')"
+    https_port="$(echo "$scutil_out" | awk '/HTTPSPort :/ {print $3}')"
+    if [[ -n "$https_host" && -n "$https_port" ]]; then
+      printf 'http://%s:%s\n' "$https_host" "$https_port"
+      return 0
+    fi
+  fi
+
+  local socks_en socks_host socks_port
+  socks_en="$(echo "$scutil_out" | awk '/SOCKSEnable :/ {print $3}')"
+  if [[ "$socks_en" == "1" ]]; then
+    socks_host="$(echo "$scutil_out" | awk '/SOCKSProxy :/ {print $3}')"
+    socks_port="$(echo "$scutil_out" | awk '/SOCKSPort :/ {print $3}')"
+    if [[ -n "$socks_host" && -n "$socks_port" ]]; then
+      printf 'socks5://%s:%s\n' "$socks_host" "$socks_port"
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
+runtime_alpine_read_config_proxy() {
+  local runtime_home="${1:-}" config_file
+  if [[ -z "$runtime_home" ]]; then
+    runtime_home="$(runtime_alpine_resolve_home)"
+  fi
+  config_file="$runtime_home/.anylinuxfs/config.toml"
+  if [[ -f "$config_file" ]]; then
+    awk -F'=' '
+      /^\[network\]/ { in_net=1; in_alp=0; next }
+      /^\[alpine\]/ { in_alp=1; in_net=0; next }
+      /^\[/ { in_net=0; in_alp=0; next }
+      (in_net || in_alp) && /^[[:space:]]*proxy[[:space:]]*=/ {
+        val = $2
+        gsub(/^[[:space:]]*["\047]|["\047][[:space:]]*$/, "", val)
+        print val
+        exit
+      }
+    ' "$config_file"
+  fi
+}
+
+runtime_alpine_sanitize_proxy() {
+  local url="${1:-}"
+  if [[ "$url" =~ ^([a-zA-Z0-9]+://)([^:]+):(.*)@([^@]+)$ ]]; then
+    printf '%s%s:***@%s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[4]}"
+  else
+    printf '%s\n' "$url"
+  fi
+}
+
+# Resolves proxy URL with fallback: NTFSMAC_PROXY/HTTP_PROXY env -> config.toml -> scutil system proxy
+runtime_alpine_resolve_proxy() {
+  local runtime_home="${1:-}"
+
+  if [[ -n "${NTFSMAC_PROXY:-}" ]]; then
+    printf '%s\n' "$NTFSMAC_PROXY"
+    return 0
+  fi
+  local var
+  for var in HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy; do
+    if [[ -n "${!var:-}" ]]; then
+      printf '%s\n' "${!var}"
+      return 0
+    fi
+  done
+
+  local cfg_proxy
+  cfg_proxy="$(runtime_alpine_read_config_proxy "$runtime_home")"
+  if [[ -n "$cfg_proxy" ]]; then
+    printf '%s\n' "$cfg_proxy"
+    return 0
+  fi
+
+  if [[ "${NTFSMAC_DISABLE_SYSTEM_PROXY:-}" != "1" ]]; then
+    local sys_proxy
+    sys_proxy="$(runtime_alpine_detect_system_proxy || true)"
+    if [[ -n "$sys_proxy" ]]; then
+      printf '%s\n' "$sys_proxy"
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
+# Reports proxy source: "environment", "config", "system", or "none"
+runtime_alpine_proxy_source() {
+  local runtime_home="${1:-}"
+
+  if [[ -n "${NTFSMAC_PROXY:-}" ]]; then
+    printf 'environment\n'
+    return 0
+  fi
+  local var
+  for var in HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy; do
+    if [[ -n "${!var:-}" ]]; then
+      printf 'environment\n'
+      return 0
+    fi
+  done
+
+  local cfg_proxy
+  cfg_proxy="$(runtime_alpine_read_config_proxy "$runtime_home")"
+  if [[ -n "$cfg_proxy" ]]; then
+    printf 'config\n'
+    return 0
+  fi
+
+  if [[ "${NTFSMAC_DISABLE_SYSTEM_PROXY:-}" != "1" ]]; then
+    local sys_proxy
+    sys_proxy="$(runtime_alpine_detect_system_proxy || true)"
+    if [[ -n "$sys_proxy" ]]; then
+      printf 'system\n'
+      return 0
+    fi
+  fi
+
+  printf 'none\n'
+  return 0
+}

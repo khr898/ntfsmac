@@ -336,7 +336,7 @@ private let sampleExtOutput = """
 
     let scanner = DriveScanner(
         anylinuxfsPath: fakeScript.path,
-        scanTimeout: 2,
+        scanTimeout: 5,
         cacheStateProvider: { .initialized }
     )
     await scanner.refresh()

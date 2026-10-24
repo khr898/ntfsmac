@@ -119,6 +119,13 @@ public struct CLIMissingView: View {
                         Text("Retry").frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.glassNeutral(colorScheme: colorScheme))
+
+                    Button {
+                        onOpenSettings()
+                    } label: {
+                        Text("Configure Proxy / Settings…").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.glassFooter(colorScheme: colorScheme, foregroundOpacity: 0.65))
                 }
                 .padding(10)
             }

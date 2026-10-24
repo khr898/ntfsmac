@@ -143,6 +143,9 @@ write_guest_versions() {
   [[ "$output" == *'"nfs_mount_count":0'* ]]
   [[ "$output" == *'"network_helper":"none"'* ]]
   [[ "$output" == *'"nfs_transport_contract":"inactive"'* ]]
+  [[ "$output" == *'"network_proxy_configured":false'* ]]
+  [[ "$output" == *'"network_proxy_source":"none"'* ]]
+  [[ "$output" == *'"network_proxy_url":""'* ]]
 }
 
 @test "an active vmnet mount satisfies the transport contract" {

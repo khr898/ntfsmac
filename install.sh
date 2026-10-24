@@ -232,6 +232,34 @@ wipe_anylinuxfs_store() {
   return 0
 }
 
+save_proxy_to_config() {
+  local target_home="${1:-}"
+  local proxy_url="${2:-}"
+  [[ -z "$target_home" || -z "$proxy_url" ]] && return 0
+
+  local conf_dir="$target_home/.anylinuxfs"
+  local conf_file="$conf_dir/config.toml"
+  mkdir -p "$conf_dir"
+
+  if [[ ! -f "$conf_file" ]]; then
+    printf '[network]\nproxy = "%s"\n' "$proxy_url" > "$conf_file"
+  else
+    if grep -q '^[[:space:]]*\[network\]' "$conf_file"; then
+      if grep -q '^[[:space:]]*proxy[[:space:]]*=' "$conf_file"; then
+        sed -i '' -e "s|^[[:space:]]*proxy[[:space:]]*=.*|proxy = \"$proxy_url\"|" "$conf_file" 2>/dev/null || \
+        sed -i -e "s|^[[:space:]]*proxy[[:space:]]*=.*|proxy = \"$proxy_url\"|" "$conf_file"
+      else
+        awk -v p="$proxy_url" '
+          /^[[:space:]]*\[network\]/ { print; print "proxy = \"" p "\""; next }
+          { print }
+        ' "$conf_file" > "$conf_file.tmp" && mv "$conf_file.tmp" "$conf_file"
+      fi
+    else
+      printf '\n[network]\nproxy = "%s"\n' "$proxy_url" >> "$conf_file"
+    fi
+  fi
+}
+
 setup_alpine_environment() {
   if [[ "${NTFSMAC_SKIP_RUNTIME_INIT:-}" == "1" ]]; then
     return 0
@@ -239,6 +267,7 @@ setup_alpine_environment() {
 
   local target_user="${1:-}"
   local target_home="${2:-}"
+  local target_proxy="${3:-}"
 
   echo "install.sh: setting up microVM environment and installing Alpine runtime (takes ~1-2 min)..."
 
@@ -246,12 +275,36 @@ setup_alpine_environment() {
   target_uid="$(id -u "$target_user" 2>/dev/null || echo "501")"
   target_gid="$(id -g "$target_user" 2>/dev/null || echo "20")"
 
+  if [[ -z "$target_proxy" ]]; then
+    if [[ -f "$target_home/.anylinuxfs/config.toml" ]]; then
+      target_proxy="$(awk -F'=' '
+        /^\[network\]/ { in_net=1; in_alp=0; next }
+        /^\[alpine\]/ { in_alp=1; in_net=0; next }
+        /^\[/ { in_net=0; in_alp=0; next }
+        (in_net || in_alp) && /^[[:space:]]*proxy[[:space:]]*=/ {
+          val = $2
+          gsub(/^[[:space:]]*["\047]|["\047][[:space:]]*$/, "", val)
+          print val
+          exit
+        }
+      ' "$target_home/.anylinuxfs/config.toml" 2>/dev/null || true)"
+    fi
+  fi
+  if [[ -z "$target_proxy" ]]; then
+    target_proxy="${NTFSMAC_PROXY:-${HTTP_PROXY:-${http_proxy:-}}}"
+  fi
+
   local anylinuxfs_bin="${NTFSMAC_ANYLINUXFS_BIN:-$PREFIX/bin/anylinuxfs}"
   if [[ -x "$anylinuxfs_bin" ]]; then
     SUDO_USER="$target_user" \
     SUDO_UID="$target_uid" \
     SUDO_GID="$target_gid" \
     HOME="$target_home" \
+    HTTP_PROXY="${target_proxy:-${HTTP_PROXY:-}}" \
+    HTTPS_PROXY="${target_proxy:-${HTTPS_PROXY:-}}" \
+    http_proxy="${target_proxy:-${http_proxy:-}}" \
+    https_proxy="${target_proxy:-${https_proxy:-}}" \
+    NTFSMAC_PROXY="${target_proxy:-${NTFSMAC_PROXY:-}}" \
     "$anylinuxfs_bin" init || {
       echo "install.sh: WARN — anylinuxfs init encountered an issue (runtime will initialize on first mount)" >&2
       return 0
@@ -277,7 +330,15 @@ main() {
     [[ -w "$PREFIX" || ( ! -e "$PREFIX" && -w "$prefix_parent" ) ]] || needs_root=1
     symlink_parent="$(dirname "$PATH_SYMLINK")"
     [[ -w "$symlink_parent" || ! -e "$symlink_parent" ]] || needs_root=1
-    [[ -n "$needs_root" ]] && exec sudo "$0" "$@"
+    [[ -n "$needs_root" ]] && exec sudo \
+      HTTP_PROXY="${HTTP_PROXY:-}" \
+      HTTPS_PROXY="${HTTPS_PROXY:-}" \
+      ALL_PROXY="${ALL_PROXY:-}" \
+      http_proxy="${http_proxy:-}" \
+      https_proxy="${https_proxy:-}" \
+      all_proxy="${all_proxy:-}" \
+      NTFSMAC_PROXY="${NTFSMAC_PROXY:-}" \
+      "$0" "$@"
   fi
 
   # `--no-path-link`: the GUI's privileged helper runs this same script (already root, via
@@ -285,9 +346,23 @@ main() {
   # explicit product decision, a GUI-only install must not expose `ntfsmac` on a Terminal PATH
   # the user never asked for. Standalone/tap installs (no flag) keep the symlink unchanged.
   local skip_link=""
-  local arg
-  for arg in "$@"; do
-    [[ "$arg" == "--no-path-link" ]] && skip_link=1
+  local cli_proxy=""
+  local i=1
+  while [[ $i -le $# ]]; do
+    local arg="${!i}"
+    case "$arg" in
+      --no-path-link)
+        skip_link=1
+        ;;
+      --proxy)
+        i=$((i + 1))
+        cli_proxy="${!i:-}"
+        ;;
+      --proxy=*)
+        cli_proxy="${arg#--proxy=}"
+        ;;
+    esac
+    i=$((i + 1))
   done
 
   refuse_non_arm64 || exit 1
@@ -299,8 +374,15 @@ main() {
   target_user="$(resolve_target_user)"
   target_home="$(resolve_target_home "$target_user")"
 
+  if [[ -n "$cli_proxy" ]]; then
+    save_proxy_to_config "$target_home" "$cli_proxy"
+    if [[ -n "$target_user" && "$target_user" != "root" ]]; then
+      chown -R "$target_user" "$target_home/.anylinuxfs" 2>/dev/null || true
+    fi
+  fi
+
   wipe_anylinuxfs_store "$target_home"
-  setup_alpine_environment "$target_user" "$target_home"
+  setup_alpine_environment "$target_user" "$target_home" "$cli_proxy"
 
   echo "install.sh: installed to $PREFIX (NTFSMAC_REPO=$NTFSMAC_REPO)"
 }

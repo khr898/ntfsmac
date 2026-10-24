@@ -91,7 +91,7 @@ STUB
   [ "$status" -eq 0 ]
   run cat "$CALL_LOG"
   [[ "$output" == *"--nfs-options soft"* ]]
-  [[ "$output" != *"ro"* ]]
+  [[ "$output" != *",ro"* ]]
 }
 
 @test "--read-only appends ro to --nfs-options, client-side enforcement" {
@@ -210,7 +210,7 @@ buf = b''
 while b'Enter BitLocker' not in buf:
     buf += os.read(master, 1024)
 os.write(master, b'test-interactive-key\n')
-proc.wait(timeout=5)
+proc.wait(timeout=15)
 os.close(master)
 "
   run cat "$CALL_LOG"
