@@ -1,5 +1,8 @@
 name: Package DMG
 
+permissions:
+  contents: read
+
 # Manual only — this produces a real distributable artifact, not something to run on
 # every push/PR (see .github/workflows/ci.yml for the build/test gates).
 on:

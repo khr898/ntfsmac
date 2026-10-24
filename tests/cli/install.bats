@@ -59,7 +59,7 @@ teardown() {
   [[ "$output" == *"linked $NTFSMAC_PATH_SYMLINK"* ]]
 }
 
-@test "self-elevates via sudo only when the prefix/symlink dir actually isn't writable" {
+@test "self-elevates via sudo when not root to enforce root:wheel installation" {
   unset NTFSMAC_SKIP_ROOT_CHECK
   local stub_dir
   stub_dir="$(mktemp -d)"
@@ -69,11 +69,9 @@ echo "\$@" >> "$stub_dir/sudo.calls"
 exit 0
 STUB
   chmod +x "$stub_dir/sudo"
-  # A writable prefix + writable symlink dir (both true here, both scratch mktemp dirs) must
-  # never trigger a password prompt.
   PATH="$stub_dir:$PATH" run "$SCRIPT"
   [ "$status" -eq 0 ]
-  [ ! -f "$stub_dir/sudo.calls" ]
+  [ -f "$stub_dir/sudo.calls" ]
   rm -rf "$stub_dir"
 }
 

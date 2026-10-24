@@ -592,7 +592,8 @@ private func makeStagedInstallScript(content: String = "#!/bin/sh\nexit 0\n") th
     #expect(data != nil)
     #expect(error == nil)
     #expect(runner.calls.count == 1)
-    #expect(runner.calls[0].executablePath == scriptPath.path)
+    #expect(runner.calls[0].executablePath.hasSuffix("/cli-src/install.sh"))
+    #expect(runner.calls[0].executablePath != scriptPath.path, "must execute from isolated root-owned staging directory to prevent TOCTOU")
     #expect(runner.calls[0].arguments == ["--no-path-link"])
 }
 
@@ -685,6 +686,7 @@ private final class ExitSinkProbe: @unchecked Sendable {
 
 @Test func exitHelperAcknowledgesThenInvokesTheExitSink() async {
     let runner = FakeRunner()
+    runner.stubbedResult = CommandResult(output: "", exitCode: 0)
     let probe = ExitSinkProbe()
     let service = HelperService(
         runner: runner,
@@ -696,6 +698,22 @@ private final class ExitSinkProbe: @unchecked Sendable {
     #expect(error == nil, "exitHelper must acknowledge cleanly so the GUI's await returns before the process dies")
     #expect(data != nil, "exitHelper must send a reply payload so HelperClient.call decodes it instead of throwing on an empty response")
     #expect(probe.invoked, "exitHelper must invoke the exit sink (exit(0) in production) so the launchd on-demand helper actually stops")
+}
+
+@Test func exitHelperRejectsWhileAnNfsMountIsActive() async {
+    let runner = FakeRunner()
+    runner.stubbedResult = CommandResult(output: "172.27.1.2:/export on /Volumes/MyDrive (nfs)", exitCode: 0)
+    let probe = ExitSinkProbe()
+    let service = HelperService(
+        runner: runner,
+        exitSink: { probe.record() }
+    )
+
+    let (data, error) = await awaitReply { service.exitHelper(reply: $0) }
+
+    #expect(data == nil)
+    #expect(error?.contains("cannot exit helper while NFS mounts are active") == true)
+    #expect(!probe.invoked, "exitHelper must not invoke exit sink when an NFS mount is still active")
 }
 
 @Test func exitHelperDefaultsToRealProcessExitWhenNoSinkInjected() async {

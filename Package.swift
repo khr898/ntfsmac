@@ -82,6 +82,7 @@ let package = Package(
                 "Update/ReleaseUpdateInfo.swift",
                 "Update/ReleaseCheckService.swift",
                 "Update/UpdateDownloadService.swift",
+                "Update/UpdateSignatureVerifier.swift",
                 "Update/UpdateExtractionService.swift",
                 "Update/AppRelaunchService.swift",
                 "Update/AppUpdateController.swift",

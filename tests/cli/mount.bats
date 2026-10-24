@@ -87,18 +87,18 @@ STUB
 }
 
 @test "absent --read-only keeps plain soft NFS options" {
-  run "$SCRIPT" disk2s1
+  run "$SCRIPT" disk2s1 < /dev/null
   [ "$status" -eq 0 ]
   run cat "$CALL_LOG"
-  [[ "$output" == *"--nfs-options soft"* ]]
-  [[ "$output" != *"ro"* ]]
+  [[ "$output" == *"--nfs-options soft,nosuid,nodev"* ]]
+  [[ "$output" != *"--nfs-options soft,ro"* ]]
 }
 
 @test "--read-only appends ro to --nfs-options, client-side enforcement" {
-  run "$SCRIPT" --read-only disk2s1
+  run "$SCRIPT" --read-only disk2s1 < /dev/null
   [ "$status" -eq 0 ]
   run cat "$CALL_LOG"
-  [[ "$output" == *"--nfs-options soft,ro"* ]]
+  [[ "$output" == *"--nfs-options soft,ro,nosuid,nodev"* ]]
 }
 
 @test "BitLocker recovery key is forwarded through a temporary key file, never argv" {

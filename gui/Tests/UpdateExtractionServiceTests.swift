@@ -91,7 +91,7 @@ private func createMockBundle(at destination: URL, missing: [String] = []) throw
     try createMockBundle(at: mockApp)
 
     let runner = FakeCommandRunner()
-    let service = RealUpdateExtractionService(runner: runner) { _, mountPoint in
+    let service = RealUpdateExtractionService(runner: runner, signatureVerifier: nil) { _, mountPoint in
         // Simulate hdiutil attach populating the mount point
         try? FileManager.default.copyItem(at: mockApp, to: mountPoint.appendingPathComponent("ntfsmac.app"))
     }
@@ -118,7 +118,7 @@ private func createMockBundle(at destination: URL, missing: [String] = []) throw
     try createMockBundle(at: mockApp, missing: ["gui"])
 
     let runner = FakeCommandRunner()
-    let service = RealUpdateExtractionService(runner: runner) { _, mountPoint in
+    let service = RealUpdateExtractionService(runner: runner, signatureVerifier: nil) { _, mountPoint in
         try? FileManager.default.copyItem(at: mockApp, to: mountPoint.appendingPathComponent("ntfsmac.app"))
     }
 
@@ -141,7 +141,7 @@ private func createMockBundle(at destination: URL, missing: [String] = []) throw
 
     let runner = FakeCommandRunner()
     runner.codesignExitCode = 1 // simulate broken signature
-    let service = RealUpdateExtractionService(runner: runner) { _, mountPoint in
+    let service = RealUpdateExtractionService(runner: runner, signatureVerifier: nil) { _, mountPoint in
         try? FileManager.default.copyItem(at: mockApp, to: mountPoint.appendingPathComponent("ntfsmac.app"))
     }
 
@@ -168,7 +168,7 @@ private func createMockBundle(at destination: URL, missing: [String] = []) throw
     #expect(hasQuarantineAttribute(at: mockApp))
 
     let runner = FakeCommandRunner()
-    let service = RealUpdateExtractionService(runner: runner) { _, mountPoint in
+    let service = RealUpdateExtractionService(runner: runner, signatureVerifier: nil) { _, mountPoint in
         try? FileManager.default.copyItem(at: mockApp, to: mountPoint.appendingPathComponent("ntfsmac.app"))
     }
 

@@ -71,6 +71,13 @@ public struct GitHubReleaseCheckService: ReleaseChecking {
             throw ReleaseCheckError.missingDMGAsset
         }
 
+        // Locate companion cryptographic signature asset (.dmg.sig, .dmg.minisig, or .sig)
+        let sigAsset = release.assets.first(where: {
+            let lower = $0.name.lowercased()
+            return lower.hasSuffix(".dmg.sig") || lower.hasSuffix(".dmg.minisig") || lower.hasSuffix(".sig")
+        })
+        let sigURL = sigAsset.flatMap { URL(string: $0.browser_download_url) }
+
         // Validate host
         guard let host = downloadURL.host?.lowercased(),
               Self.trustedHosts.contains(host) || Self.trustedHosts.contains(where: { host.hasSuffix("." + $0) })
@@ -88,7 +95,8 @@ public struct GitHubReleaseCheckService: ReleaseChecking {
             dmgURL: downloadURL,
             assetSize: dmgAsset.size,
             releaseNotes: release.body ?? "",
-            publishedAt: publishedDate
+            publishedAt: publishedDate,
+            signatureURL: sigURL
         )
 
         return updateInfo.isNewer(than: currentVersion) ? updateInfo : nil

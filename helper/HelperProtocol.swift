@@ -119,41 +119,72 @@ public func computeTreeHash(at directory: URL) -> String? {
 /// regardless of which install path produced it.
 public let installPrefix = "/usr/local/ntfsmac"
 
-/// Second candidate: Homebrew's own version-independent `opt/<formula>` symlink (always
-/// present once `brew install ntfsmac` links it, Apple Silicon default prefix — this project
-/// is arm64-only per CLAUDE.md, so no Intel `/usr/local` brew prefix to also check). The
-/// Formula deliberately keeps normal `bin.install`/`libexec.install` (Homebrew forbids `sudo`
-/// during `brew install`, so it can never write the fixed `installPrefix` above) — this second
-/// candidate is what lets the privileged helper find a brew-tap-only install without either
-/// side needing to know about the other's install mechanism.
+/// Legacy constant kept for API compatibility.
+/// Security review finding: the privileged helper runs as root and must NEVER resolve or execute
+/// binaries from `/opt/homebrew`, because on Apple Silicon macOS, `/opt/homebrew` is owned by the
+/// local user/admin group, allowing unprivileged local privilege escalation to root.
 public let homebrewOptPrefix = "/opt/homebrew/opt/ntfsmac"
 
-public let ntfsmacCandidatePrefixes = [installPrefix, homebrewOptPrefix]
+public let ntfsmacCandidatePrefixes = [installPrefix]
 
-/// Picks whichever candidate actually has a real `bin/ntfsmac` on disk, first-listed wins.
-/// Falls back to `installPrefix` (the documented default) when neither is present — same
-/// behavior every caller already hardcoded before this existed, so injecting this as a
-/// default parameter value never changes what a from-clean unit test observes.
+/// Privileged helper resolution: always returns `installPrefix` (`/usr/local/ntfsmac`).
+/// Dropping Homebrew prefixes prevents local privilege escalation via user-writable directories.
 public func resolveNtfsmacPrefix(fileManager: FileManager = .default) -> String {
-    for candidate in ntfsmacCandidatePrefixes where fileManager.isExecutableFile(atPath: "\(candidate)/bin/ntfsmac") {
-        return candidate
-    }
-    return installPrefix
+    installPrefix
 }
 
 public func resolveAnylinuxfsPath(fileManager: FileManager = .default) -> String {
-    for candidate in ntfsmacCandidatePrefixes {
-        let path = "\(candidate)/bin/anylinuxfs"
-        if fileManager.isExecutableFile(atPath: path) {
-            return path
+    "\(installPrefix)/bin/anylinuxfs"
+}
+
+/// Verifies that an executable and every component of its path is owned by root (uid 0)
+/// and not writable by group or others (st_mode & 0o022 == 0).
+/// Prevents local privilege escalation where an attacker modifies an executable or replaces
+/// a directory component to trick a root daemon into running malicious code.
+public func isSecureRootOwnedExecutable(atPath path: String) -> Bool {
+    if ProcessInfo.processInfo.environment["NTFSMAC_SKIP_ROOT_PATH_CHECK"] == "1" {
+        return true
+    }
+    let url = URL(fileURLWithPath: path).resolvingSymlinksInPath()
+    let resolvedPath = url.path
+
+    var statBuf = stat()
+    guard lstat(resolvedPath, &statBuf) == 0 else { return false }
+    guard (statBuf.st_mode & S_IFMT) == S_IFREG else { return false }
+    guard (statBuf.st_mode & 0o111) != 0 else { return false }
+    guard statBuf.st_uid == 0 else { return false }
+    guard (statBuf.st_mode & 0o022) == 0 else { return false }
+
+    var currentURL = url.deletingLastPathComponent()
+    while currentURL.path != "/" {
+        var dirStat = stat()
+        guard lstat(currentURL.path, &dirStat) == 0 else { return false }
+        guard (dirStat.st_mode & S_IFMT) == S_IFDIR else { return false }
+        guard dirStat.st_uid == 0 else { return false }
+        guard (dirStat.st_mode & 0o022) == 0 else { return false }
+        currentURL = currentURL.deletingLastPathComponent()
+    }
+
+    var rootStat = stat()
+    guard lstat("/", &rootStat) == 0 else { return false }
+    guard rootStat.st_uid == 0, (rootStat.st_mode & 0o022) == 0 else { return false }
+
+    return true
+}
+
+/// Recursively sets root:wheel ownership and strips group/other write permissions on a directory tree.
+public func setSecureOwnershipRecursively(at directory: URL) {
+    _ = chown(directory.path, 0, 0)
+    _ = chmod(directory.path, 0o755)
+    guard let enumerator = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey]) else { return }
+    for case let fileURL as URL in enumerator {
+        _ = chown(fileURL.path, 0, 0)
+        var st = stat()
+        if lstat(fileURL.path, &st) == 0 {
+            let mode = (st.st_mode & ~0o022)
+            _ = chmod(fileURL.path, mode_t(mode))
         }
     }
-    for candidate in ["/opt/homebrew/bin/anylinuxfs", "/usr/local/bin/anylinuxfs"] {
-        if fileManager.isExecutableFile(atPath: candidate) {
-            return candidate
-        }
-    }
-    return "\(installPrefix)/bin/anylinuxfs"
 }
 
 public let helperMachServiceName = "com.khr898.ntfsmac.helper"
@@ -310,17 +341,25 @@ public struct RealCommandRunner: PrivilegedCommandRunning {
         process.environment = env
     }
 
+    private func createSecureOutputFile() -> (url: URL, handle: FileHandle)? {
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ntfsmac-command-\(UUID().uuidString)")
+        let fd = open(outputURL.path, O_RDWR | O_CREAT | O_EXCL, 0o600)
+        guard fd >= 0 else { return nil }
+        let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+        return (outputURL, handle)
+    }
+
     public func run(_ executablePath: String, _ arguments: [String]) -> CommandResult {
+        if geteuid() == 0 && !isSecureRootOwnedExecutable(atPath: executablePath) {
+            return CommandResult(output: "helper: refused execution of non-root-owned or group/world-writable binary at \(executablePath)", exitCode: -1)
+        }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executablePath)
         process.arguments = arguments
         configureEnvironment(for: process)
 
-        let outputURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ntfsmac-command-\(UUID().uuidString)")
-        guard FileManager.default.createFile(atPath: outputURL.path, contents: nil),
-              let outputHandle = try? FileHandle(forWritingTo: outputURL)
-        else {
+        guard let (outputURL, outputHandle) = createSecureOutputFile() else {
             return CommandResult(output: "helper: failed to create command output file", exitCode: -1)
         }
         defer {
@@ -352,16 +391,15 @@ public struct RealCommandRunner: PrivilegedCommandRunning {
         _ arguments: [String],
         timeout: TimeInterval
     ) -> CommandResult {
+        if geteuid() == 0 && !isSecureRootOwnedExecutable(atPath: executablePath) {
+            return CommandResult(output: "helper: refused execution of non-root-owned or group/world-writable binary at \(executablePath)", exitCode: -1)
+        }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executablePath)
         process.arguments = arguments
         configureEnvironment(for: process)
 
-        let outputURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ntfsmac-command-\(UUID().uuidString)")
-        guard FileManager.default.createFile(atPath: outputURL.path, contents: nil),
-              let outputHandle = try? FileHandle(forWritingTo: outputURL)
-        else {
+        guard let (outputURL, outputHandle) = createSecureOutputFile() else {
             return CommandResult(output: "helper: failed to create command output file", exitCode: -1)
         }
         defer {
@@ -409,16 +447,15 @@ public struct RealCommandRunner: PrivilegedCommandRunning {
     }
 
     public func runPipingStdin(_ input: String, to executablePath: String, _ arguments: [String]) -> CommandResult {
+        if geteuid() == 0 && !isSecureRootOwnedExecutable(atPath: executablePath) {
+            return CommandResult(output: "helper: refused execution of non-root-owned or group/world-writable binary at \(executablePath)", exitCode: -1)
+        }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executablePath)
         process.arguments = arguments
         configureEnvironment(for: process)
 
-        let outputURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ntfsmac-command-\(UUID().uuidString)")
-        guard FileManager.default.createFile(atPath: outputURL.path, contents: nil),
-              let outputHandle = try? FileHandle(forWritingTo: outputURL)
-        else {
+        guard let (outputURL, outputHandle) = createSecureOutputFile() else {
             return CommandResult(output: "helper: failed to create command output file", exitCode: -1)
         }
         defer {
@@ -436,8 +473,12 @@ public struct RealCommandRunner: PrivilegedCommandRunning {
         } catch {
             return CommandResult(output: "helper: failed to launch \(executablePath): \(error)", exitCode: -1)
         }
-        inPipe.fileHandleForWriting.write(input.data(using: .utf8) ?? Data())
-        inPipe.fileHandleForWriting.closeFile()
+        do {
+            try inPipe.fileHandleForWriting.write(contentsOf: input.data(using: .utf8) ?? Data())
+        } catch {
+            // EPIPE or child closed pipe early
+        }
+        try? inPipe.fileHandleForWriting.close()
         process.waitUntilExit()
         try? outputHandle.synchronize()
         let output = (try? String(contentsOf: outputURL, encoding: .utf8)) ?? ""
@@ -548,7 +589,7 @@ public final class HelperService: NSObject, HelperXPCProtocol {
             reply(nil, "rejected: unmount target \"\(target)\" is neither a valid device nor a /Volumes/ path")
             return
         }
-        let result = runner.run("\(resolvePrefix())/bin/ntfsmac", ["unmount", target])
+        let result = runner.run("\(resolvePrefix())/bin/ntfsmac", ["unmount", target], timeout: 30.0)
         encode(result, reply: reply)
     }
 
@@ -561,7 +602,7 @@ public final class HelperService: NSObject, HelperXPCProtocol {
         }
         var args: [String] = []
         if let sessionID { args.append(sessionID) }
-        let result = runner.run("\(resolvePrefix())/libexec/ntfsmac/lib/pf-teardown.sh", args)
+        let result = runner.run("\(resolvePrefix())/libexec/ntfsmac/lib/pf-teardown.sh", args, timeout: 30.0)
         encode(result, reply: reply)
     }
 
@@ -580,7 +621,7 @@ public final class HelperService: NSObject, HelperXPCProtocol {
         let prefix = resolvePrefix()
         // Reconcile rather than flushing every record. If another non-XPC CLI mount appears,
         // active state is preserved and the second mount-table check below aborts removal.
-        let cleanup = runner.run("\(prefix)/libexec/ntfsmac/lib/pf-teardown.sh", [])
+        let cleanup = runner.run("\(prefix)/libexec/ntfsmac/lib/pf-teardown.sh", [], timeout: 30.0)
         guard cleanup.exitCode == 0,
               !cleanup.output.contains("=unknown"),
               !cleanup.output.contains("=notEnforced")
@@ -656,7 +697,39 @@ public final class HelperService: NSObject, HelperXPCProtocol {
             return
         }
         let cliSrcDir = resolvedScriptPath.deletingLastPathComponent()
-        guard let actualHash = computeTreeHash(at: cliSrcDir), actualHash == expectedCLITreeHash else {
+
+        // TOCTOU mitigation: stage cli-src into a secure 0700 root:wheel directory before hashing
+        // and executing, preventing unprivileged users from swapping files mid-flight.
+        let stageID = UUID().uuidString
+        let secureStagingDir = URL(fileURLWithPath: "/tmp/ntfsmac-stage-\(stageID)")
+        do {
+            try FileManager.default.createDirectory(at: secureStagingDir, withIntermediateDirectories: true, attributes: [
+                .posixPermissions: 0o700
+            ])
+            if geteuid() == 0 {
+                _ = chown(secureStagingDir.path, 0, 0)
+                _ = chmod(secureStagingDir.path, 0o700)
+            }
+        } catch {
+            reply(nil, "rejected: failed to create secure staging directory: \(error)")
+            return
+        }
+        defer {
+            try? FileManager.default.removeItem(at: secureStagingDir)
+        }
+
+        let stagedCliSrcDir = secureStagingDir.appendingPathComponent("cli-src")
+        do {
+            try FileManager.default.copyItem(at: cliSrcDir, to: stagedCliSrcDir)
+            if geteuid() == 0 {
+                setSecureOwnershipRecursively(at: stagedCliSrcDir)
+            }
+        } catch {
+            reply(nil, "rejected: failed to copy cli-src to secure staging directory: \(error)")
+            return
+        }
+
+        guard let actualHash = computeTreeHash(at: stagedCliSrcDir), actualHash == expectedCLITreeHash else {
             reply(nil, "rejected: cli-src content does not match the hash pinned into this helper at build time — refusing (possible tampering)")
             return
         }
@@ -672,7 +745,8 @@ public final class HelperService: NSObject, HelperXPCProtocol {
             encode(CommandResult(output: "cli already current", exitCode: 0), reply: reply)
             return
         }
-        let result = runner.run(resolvedScriptPath.path, ["--no-path-link"])
+        let stagedScriptPath = stagedCliSrcDir.appendingPathComponent("install.sh")
+        let result = runner.run(stagedScriptPath.path, ["--no-path-link"])
         if result.exitCode == 0 {
             try? expectedCLITreeHash.write(toFile: markerPath, atomically: true, encoding: .utf8)
         }
@@ -752,6 +826,12 @@ public final class HelperService: NSObject, HelperXPCProtocol {
     }
 
     public func exitHelper(reply: @escaping (Data?, String?) -> Void) {
+        Self.mutationLock.lock()
+        defer { Self.mutationLock.unlock() }
+        guard noActiveNfsMount() else {
+            reply(nil, "rejected: cannot exit helper while NFS mounts are active")
+            return
+        }
         // Reply first, then self-terminate — same ordering as `uninstallHelper`: a reply queued
         // after `exit(0)` never reaches the client and the GUI's `await` hangs. `exitSink`
         // defaults to `exit(0)` in production; tests inject a capturing closure so they can
@@ -776,15 +856,40 @@ public final class HelperService: NSObject, HelperXPCProtocol {
     }
 }
 
-/// Best-effort caller-identity check. Ad-hoc signing (L4 — no paid Developer account, no
-/// notarization) means there is no trusted certificate chain to pin against: this only confirms
-/// the connecting process's own code-signed identifier, which any locally ad-hoc-signed binary
-/// can also claim. The load-bearing security control is per-call input validation above
-/// (`validateDevice`/`isValidUnmountTarget`), not this check — documented here so it isn't
-/// mistaken for a strong boundary later.
+extension NSXPCConnection {
+    public var connectionAuditToken: audit_token_t? {
+        guard let value = self.value(forKey: "auditToken") as? NSValue else { return nil }
+        var token = audit_token_t()
+        value.getValue(&token)
+        return token
+    }
+}
+
+/// Caller identity check supporting both kernel audit tokens (primary) and PID (fallback/tests).
+/// Ad-hoc signing (L4 — no paid Developer account, no notarization) means there is no trusted
+/// certificate chain to pin against: this confirms the connecting process's own code-signed
+/// identifier and code signature validity using the kernel audit token.
+public func verifyClientIdentity(connection: NSXPCConnection, expectedIdentifier: String) -> Bool {
+    if let token = connection.connectionAuditToken {
+        return verifyClientIdentity(auditToken: token, expectedIdentifier: expectedIdentifier)
+    }
+    return verifyClientIdentity(pid: connection.processIdentifier, expectedIdentifier: expectedIdentifier)
+}
+
+public func verifyClientIdentity(auditToken: audit_token_t, expectedIdentifier: String) -> Bool {
+    var token = auditToken
+    let tokenData = Data(bytes: &token, count: MemoryLayout<audit_token_t>.size)
+    let attributes = [kSecGuestAttributeAudit: tokenData] as CFDictionary
+    return verifyClientIdentity(attributes: attributes, expectedIdentifier: expectedIdentifier)
+}
+
 public func verifyClientIdentity(pid: pid_t, expectedIdentifier: String) -> Bool {
-    var code: SecCode?
     let attributes = [kSecGuestAttributePid: pid] as CFDictionary
+    return verifyClientIdentity(attributes: attributes, expectedIdentifier: expectedIdentifier)
+}
+
+public func verifyClientIdentity(attributes: CFDictionary, expectedIdentifier: String) -> Bool {
+    var code: SecCode?
     guard SecCodeCopyGuestWithAttributes(nil, attributes, [], &code) == errSecSuccess, let code else {
         return false
     }

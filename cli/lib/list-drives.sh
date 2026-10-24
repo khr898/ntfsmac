@@ -100,7 +100,8 @@ list_mountable_drives() {
   local drive_re='^[[:space:]]*[0-9]+:[[:space:]]+(.*)([*][0-9.]+[[:space:]]+[A-Za-z]+|[[:space:]]+[0-9.]+[[:space:]]+[A-Za-z]+)[[:space:]]+([A-Za-z0-9]+)[[:space:]]*$'
 
   tmp="$(mktemp)" || return 1
-  trap 'rm -f -- "$tmp"' INT TERM
+  trap 'rm -f -- "$tmp"; trap - INT; kill -INT $$' INT
+  trap 'rm -f -- "$tmp"; trap - TERM; kill -TERM $$' TERM
   if ! HOME="$runtime_home" run_with_progress "$timeout" 5 "$label" "$tmp" "$ANYLINUXFS_BIN" list; then
     rm -f "$tmp"
     trap - INT TERM
@@ -175,7 +176,8 @@ fs_type_for_device() {
   local device="$1" ident label size fstype rest line
   local tmp
   tmp="$(mktemp)" || return 1
-  trap 'rm -f -- "$tmp"' INT TERM
+  trap 'rm -f -- "$tmp"; trap - INT; kill -INT $$' INT
+  trap 'rm -f -- "$tmp"; trap - TERM; kill -TERM $$' TERM
   if list_mountable_drives > "$tmp" 2>/dev/null; then
     # Manual tab split (not `IFS=$'\t' read`): an empty label field makes `read` collapse
     # fields and lose fstype — see mount.sh's picker loop for the same fix + rationale.
@@ -212,7 +214,8 @@ list_active_nfs_mounts() {
   local mount_re='^([^[:space:]]+)[[:space:]]+on[[:space:]]+(/Volumes/[^[:space:](]+)[[:space:]]+\(nfs'
 
   tmp="$(mktemp)" || return 1
-  trap 'rm -f -- "$tmp"' INT TERM
+  trap 'rm -f -- "$tmp"; trap - INT; kill -INT $$' INT
+  trap 'rm -f -- "$tmp"; trap - TERM; kill -TERM $$' TERM
   if ! run_with_progress "${NTFSMAC_MOUNT_LIST_TIMEOUT:-15}" 5 "unmount: listing mounts" "$tmp" mount; then
     rm -f "$tmp"
     trap - INT TERM

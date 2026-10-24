@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import CryptoKit
 import HelperShared
 @testable import NtfsmacGUI
 
@@ -120,8 +121,14 @@ struct UpdateIntegrationTests {
         let testDMG = tempDir.appendingPathComponent("ntfsmac.dmg")
         try FileManager.default.copyItem(at: sourceDMG, to: testDMG)
 
-        let service = RealUpdateExtractionService()
-        let stagedApp = try await service.extractAndValidate(dmgURL: testDMG)
+        // Generate test Ed25519 keypair and sign testDMG
+        let privateKey = Curve25519.Signing.PrivateKey()
+        let verifier = CryptoKitUpdateSignatureVerifier(publicKey: privateKey.publicKey)
+        let dmgData = try Data(contentsOf: testDMG)
+        let sig = try privateKey.signature(for: dmgData)
+
+        let service = RealUpdateExtractionService(signatureVerifier: verifier)
+        let stagedApp = try await service.extractAndValidate(dmgURL: testDMG, signatureData: sig)
         defer { try? FileManager.default.removeItem(at: stagedApp.deletingLastPathComponent()) }
 
         // Verify staged bundle exists and structure is intact
@@ -221,5 +228,63 @@ struct UpdateIntegrationTests {
         #expect(args.count == 3)
         #expect(args[1] == stagedApp.path)
         #expect(args[2] == targetApp.path)
+    }
+
+    @Test func ed25519SignatureVerificationAcceptsValidSignature() throws {
+        let privateKey = Curve25519.Signing.PrivateKey()
+        let verifier = CryptoKitUpdateSignatureVerifier(publicKey: privateKey.publicKey)
+
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("sig-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let dmgFile = tempDir.appendingPathComponent("test.dmg")
+        let dmgData = Data("test-dmg-payload".utf8)
+        try dmgData.write(to: dmgFile)
+
+        let signature = try privateKey.signature(for: dmgData)
+        let isValid = try verifier.verify(dmgURL: dmgFile, signatureData: signature)
+        #expect(isValid)
+    }
+
+    @Test func ed25519SignatureVerificationRejectsTamperedDMG() throws {
+        let privateKey = Curve25519.Signing.PrivateKey()
+        let verifier = CryptoKitUpdateSignatureVerifier(publicKey: privateKey.publicKey)
+
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("sig-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let dmgFile = tempDir.appendingPathComponent("test.dmg")
+        let dmgData = Data("original-dmg-payload".utf8)
+        try dmgData.write(to: dmgFile)
+        let signature = try privateKey.signature(for: dmgData)
+
+        // Tamper with the DMG
+        try Data("tampered-dmg-payload".utf8).write(to: dmgFile)
+
+        #expect(throws: SignatureVerificationError.signatureMismatch) {
+            _ = try verifier.verify(dmgURL: dmgFile, signatureData: signature)
+        }
+    }
+
+    @Test func extractionServiceRejectsUnsignedDMGBeforeMounting() async throws {
+        let privateKey = Curve25519.Signing.PrivateKey()
+        let verifier = CryptoKitUpdateSignatureVerifier(publicKey: privateKey.publicKey)
+        let service = RealUpdateExtractionService(signatureVerifier: verifier)
+
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("sig-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let dmgFile = tempDir.appendingPathComponent("test.dmg")
+        try Data("dummy".utf8).write(to: dmgFile)
+
+        do {
+            _ = try await service.extractAndValidate(dmgURL: dmgFile, signatureData: nil)
+            Issue.record("Expected signatureVerificationFailed error")
+        } catch UpdateExtractionError.signatureVerificationFailed {
+            // Expected
+        }
     }
 }

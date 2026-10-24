@@ -1,6 +1,8 @@
 # ntfsmac per-session PF anchor — loaded as direct child com.apple/ntfsmac-{{SESSION}}.
 # The NFS client initiates TCP/UDP traffic to fixed NFS (2049) and mountd (32767) ports; PF state
-# permits replies. Every other IPv4 packet entering or leaving this one vmnet /30 is dropped.
+# permits replies. Every other IPv4 packet entering or leaving this one vmnet /30 is dropped,
+# and all IPv6 traffic on the bridge interface is blocked to prevent VM link-local host access.
+block drop quick on {{INTERFACE}} inet6 all label "ntfsmac-{{SESSION}}-inet6-block"
 pass out quick on {{INTERFACE}} inet proto { tcp, udp } from {{SUBNET}} to {{SUBNET}} port { 2049, 32767 } keep state label "ntfsmac-{{SESSION}}-nfs"
 block drop quick on {{INTERFACE}} inet from {{SUBNET}} to any label "ntfsmac-{{SESSION}}-egress-block"
 block drop quick on {{INTERFACE}} inet from any to {{SUBNET}} label "ntfsmac-{{SESSION}}-ingress-block"

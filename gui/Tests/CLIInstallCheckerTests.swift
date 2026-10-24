@@ -45,6 +45,6 @@ import Testing
     let checker = CLIInstallChecker()
     // Just proves the default wiring stays in sync with HelperShared's own candidate list —
     // a real assertion on behavior would need a real install, which this repo's CI doesn't have.
-    #expect(ntfsmacCandidatePrefixes.map { "\($0)/bin/ntfsmac" }.count == 2)
+    #expect(ntfsmacCandidatePrefixes.map { "\($0)/bin/ntfsmac" }.count == 1)
     checker.check()
 }

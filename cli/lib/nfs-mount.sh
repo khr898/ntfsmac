@@ -108,14 +108,11 @@ run_anylinuxfs_mount() {
   [[ -n "$mount_point" ]] && args+=("$mount_point")
   local nfs_opts="soft"
   [[ -n "$read_only" ]] && nfs_opts="soft,ro"
-  # Throughput tuning — default-on (PLAN.md L8 owner-override, see README "Performance"):
-  # rsize/wsize=1MB (NFSv3/TCP max transfer unit; kernel auto-negotiates down to the server's
-  # cap, so this never fails or loses data — it just widens the pipe) + readahead=16 (macOS
-  # mount_nfs read-ahead window; pure prefetch). Near-zero risk, no integrity path. rsize ==
-  # wsize on purpose: macOS mount_nfs warns on a high wsize/rsize ratio ("unexpected readahead
-  # RPCs"). This is the single place --nfs-options is set (comment block above), so the GUI
-  # path (helper → ntfsmac mount → mount.sh → here) inherits tuning with no GUI/XPC change.
-  nfs_opts="$nfs_opts,rsize=1048576,wsize=1048576,readahead=16"
+  # Security review finding: nosuid,nodev are critical to prevent local privilege escalation.
+  # Without nosuid, an external drive or disk image containing an attacker-owned SUID binary
+  # would allow any unprivileged local user to execute it as root on macOS.
+  # Without nodev, character or block device nodes could be interpreted from untrusted mounts.
+  nfs_opts="$nfs_opts,nosuid,nodev,rsize=1048576,wsize=1048576,readahead=16"
   args+=(--nfs-options "$nfs_opts")
   [[ -n "$fs_driver" ]] && args+=(-t "$fs_driver")
   [[ -n "$ignore_perms" ]] && args+=(--ignore-permissions)

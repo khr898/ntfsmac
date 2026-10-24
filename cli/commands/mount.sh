@@ -19,27 +19,20 @@ usage() {
 }
 
 # Runs one mount with a credential read from stdin. A subshell scopes the EXIT/signal trap, so
-# the plaintext key file is removed on every return path without overwriting a caller's traps
-# when this file is sourced by tests.
+# the credential is fed directly through an anonymous process-substitution pipe descriptor without
+# ever touching physical disk storage.
 run_mount_with_stdin_credential() (
   local device="$1" fs_driver="${2:-}" mount_point="${3:-}" read_only="${4:-}" ignore_perms="${5:-}"
-  local recovery_key="" key_file=""
+  local recovery_key=""
   IFS= read -r recovery_key || true
   if [[ -z "$recovery_key" || ${#recovery_key} -gt 256 || "$recovery_key" == *$'\n'* || "$recovery_key" == *$'\r'* ]]; then
     echo "mount: invalid or empty BitLocker password or recovery key" >&2
     return 1
   fi
-  key_file="$(mktemp "${TMPDIR:-/tmp}/ntfsmac-bitlocker.XXXXXX")" || return 1
-  trap 'rm -f -- "$key_file"' EXIT
   trap 'exit 130' HUP INT TERM
-  chmod 600 "$key_file" || return 1
-  printf '%s' "$recovery_key" > "$key_file" || return 1
+  # Keep the credential in memory through an anonymous pipe (no plaintext written to disk).
+  exec 9< <(printf '%s' "$recovery_key") || return 1
   unset recovery_key
-  # Keep the credential only through an inherited read-only fd. Unlink the directory entry
-  # before anylinuxfs starts, so even SIGKILL/helper death cannot leave plaintext on disk.
-  exec 9<"$key_file" || return 1
-  rm -f -- "$key_file" || return 1
-  key_file=""
   run_anylinuxfs_mount "$device" "$fs_driver" "$mount_point" "$read_only" "$ignore_perms" "/dev/fd/9"
   local result=$?
   exec 9<&-
@@ -202,7 +195,8 @@ cmd_mount() {
   if [[ -n "$credential_required_error" && -z "$recovery_key_stdin" && -n "$ANYLINUXFS_BIN" ]]; then
     local probe_output="" probe_tmp=""
     probe_tmp="$(mktemp)" || return 1
-    trap 'rm -f -- "$probe_tmp"' INT TERM
+    trap 'rm -f -- "$probe_tmp"; trap - INT; kill -INT $$' INT
+    trap 'rm -f -- "$probe_tmp"; trap - TERM; kill -TERM $$' TERM
     if ! run_with_progress "${NTFSMAC_LIST_TIMEOUT:-20}" 5 "mount: probing encryption" "$probe_tmp" \
       "$ANYLINUXFS_BIN" list --microsoft; then
       rm -f "$probe_tmp"
@@ -254,7 +248,8 @@ cmd_mount() {
     elif [[ -n "$ANYLINUXFS_BIN" ]]; then
       local probe_tmp
       probe_tmp="$(mktemp)" || return 1
-      trap 'rm -f -- "$probe_tmp"' INT TERM
+      trap 'rm -f -- "$probe_tmp"; trap - INT; kill -INT $$' INT
+      trap 'rm -f -- "$probe_tmp"; trap - TERM; kill -TERM $$' TERM
       if run_with_progress "${NTFSMAC_LIST_TIMEOUT:-20}" 5 "mount: probing encryption" "$probe_tmp" "$ANYLINUXFS_BIN" list --microsoft 2>/dev/null; then
         if awk -v dev="$device" '$NF == dev && $0 ~ /BitLocker/ { found=1 } END { exit !found }' "$probe_tmp"; then
           is_bitlocker=1
@@ -267,7 +262,7 @@ cmd_mount() {
       local entered_key=""
       read -s -r -p "Enter BitLocker password or recovery key for $device: " entered_key
       echo "" >&2
-      if run_mount_with_stdin_credential "$device" "$fs_driver" "$mount_point" "$read_only" "$ignore_perms" <<< "$entered_key"; then
+      if printf '%s\n' "$entered_key" | run_mount_with_stdin_credential "$device" "$fs_driver" "$mount_point" "$read_only" "$ignore_perms"; then
         unset entered_key
         security_apply_for_mount "$device" || \
           echo "security_overall=unknown reason=SECURITY_TRANSACTION_FAILED" >&2

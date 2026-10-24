@@ -26,6 +26,10 @@ private struct FakeUpdateExtractionService: UpdateExtracting {
     func extractAndValidate(dmgURL: URL) async throws -> URL {
         try result.get()
     }
+
+    func extractAndValidate(dmgURL: URL, signatureData: Data?) async throws -> URL {
+        try result.get()
+    }
 }
 
 private final class FakeAppRelaunchService: AppRelaunching, @unchecked Sendable {

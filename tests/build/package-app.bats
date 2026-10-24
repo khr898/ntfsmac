@@ -16,7 +16,11 @@ setup() {
   cp /bin/echo "$RELEASE_DIR/ntfsmac-gui"
   local mock_c="$(mktemp).c"
   printf '#include <stdio.h>\n#include <string.h>\nint main(int argc, char **argv) {\n  if (argc > 1 && strcmp(argv[1], "--print-tree-hash") == 0) {\n    printf("mocktreehash1234567890abcdef123\\n");\n  }\n  return 0;\n}\n' > "$mock_c"
-  clang "$mock_c" -o "$RELEASE_DIR/ntfsmac-helper"
+  if command -v xcrun >/dev/null 2>&1; then
+    xcrun --sdk macosx clang "$mock_c" -o "$RELEASE_DIR/ntfsmac-helper"
+  else
+    clang "$mock_c" -o "$RELEASE_DIR/ntfsmac-helper"
+  fi
   rm -f "$mock_c"
   chmod +x "$RELEASE_DIR/ntfsmac-gui" "$RELEASE_DIR/ntfsmac-helper"
 

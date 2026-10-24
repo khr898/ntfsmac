@@ -58,6 +58,13 @@ public final class AppUpdateController: ObservableObject {
         state = .downloading(progress: 0.0)
 
         do {
+            var signatureData = info.signatureData
+            if signatureData == nil, let sigURL = info.signatureURL {
+                let sigFileURL = try await downloadService.download(from: sigURL) { _ in }
+                signatureData = try? Data(contentsOf: sigFileURL)
+                try? FileManager.default.removeItem(at: sigFileURL)
+            }
+
             let dmgURL = try await downloadService.download(from: info.dmgURL) { [weak self] progress in
                 Task { @MainActor in
                     self?.state = .downloading(progress: progress)
@@ -65,7 +72,7 @@ public final class AppUpdateController: ObservableObject {
             }
 
             state = .extracting
-            let stagedApp = try await extractionService.extractAndValidate(dmgURL: dmgURL)
+            let stagedApp = try await extractionService.extractAndValidate(dmgURL: dmgURL, signatureData: signatureData)
             state = .readyToRestart(stagedAppURL: stagedApp, version: info.version)
         } catch {
             state = .failed(Self.describe(error))
@@ -122,6 +129,8 @@ public final class AppUpdateController: ObservableObject {
                 return "Update verification failed: \(reason)"
             case .codeSignatureInvalid:
                 return "Update code signature verification failed."
+            case .signatureVerificationFailed(let reason):
+                return "Update cryptographic signature verification failed: \(reason)"
             case .extractionFailed(let reason):
                 return "Failed to extract update: \(reason)"
             }

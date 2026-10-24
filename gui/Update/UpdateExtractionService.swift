@@ -27,26 +27,57 @@ public enum UpdateExtractionError: Error, Equatable, Sendable {
     case bundleNotFound
     case invalidBundleStructure(String)
     case codeSignatureInvalid
+    case signatureVerificationFailed(String)
     case extractionFailed(String)
 }
 
 public protocol UpdateExtracting: Sendable {
     func extractAndValidate(dmgURL: URL) async throws -> URL
+    func extractAndValidate(dmgURL: URL, signatureData: Data?) async throws -> URL
+}
+
+extension UpdateExtracting {
+    public func extractAndValidate(dmgURL: URL) async throws -> URL {
+        try await extractAndValidate(dmgURL: dmgURL, signatureData: nil)
+    }
+
+    public func extractAndValidate(dmgURL: URL, signatureData: Data?) async throws -> URL {
+        try await extractAndValidate(dmgURL: dmgURL)
+    }
 }
 
 public struct RealUpdateExtractionService: UpdateExtracting {
     private let runner: any (PrivilegedCommandRunning & Sendable)
     private let onMountAttachment: (@Sendable (URL, URL) -> Void)?
+    private let signatureVerifier: (any UpdateSignatureVerifying)?
 
     public init(
         runner: any (PrivilegedCommandRunning & Sendable) = RealCommandRunner(),
+        signatureVerifier: (any UpdateSignatureVerifying)? = try? CryptoKitUpdateSignatureVerifier(),
         onMountAttachment: (@Sendable (URL, URL) -> Void)? = nil
     ) {
         self.runner = runner
+        self.signatureVerifier = signatureVerifier
         self.onMountAttachment = onMountAttachment
     }
 
-    public func extractAndValidate(dmgURL: URL) async throws -> URL {
+    public func extractAndValidate(dmgURL: URL, signatureData: Data?) async throws -> URL {
+        // Pre-mount cryptographic authenticity verification: release DMGs must be signed
+        // offline with an authorized Ed25519 key. Verifying the signature BEFORE hdiutil attach
+        // ensures that malformed or tampered DMGs are never mounted or executed.
+        if let verifier = signatureVerifier {
+            guard let signatureData else {
+                try? FileManager.default.removeItem(at: dmgURL)
+                throw UpdateExtractionError.signatureVerificationFailed("Missing cryptographic release signature for DMG")
+            }
+            do {
+                _ = try verifier.verify(dmgURL: dmgURL, signatureData: signatureData)
+            } catch {
+                try? FileManager.default.removeItem(at: dmgURL)
+                throw UpdateExtractionError.signatureVerificationFailed("Cryptographic signature verification failed: \(error)")
+            }
+        }
+
         let fileManager = FileManager.default
         let mountPoint = fileManager.temporaryDirectory
             .appendingPathComponent("ntfsmac-mount-\(UUID().uuidString)")

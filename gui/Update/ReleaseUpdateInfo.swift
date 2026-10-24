@@ -9,6 +9,8 @@ public struct ReleaseUpdateInfo: Equatable, Sendable, Codable {
     public let assetSize: Int64
     public let releaseNotes: String
     public let publishedAt: Date?
+    public let signatureURL: URL?
+    public let signatureData: Data?
 
     public init(
         tagName: String,
@@ -17,7 +19,9 @@ public struct ReleaseUpdateInfo: Equatable, Sendable, Codable {
         dmgURL: URL,
         assetSize: Int64,
         releaseNotes: String,
-        publishedAt: Date? = nil
+        publishedAt: Date? = nil,
+        signatureURL: URL? = nil,
+        signatureData: Data? = nil
     ) {
         self.tagName = tagName
         let (parsedVersion, parsedBuild) = Self.parseTag(tagName)
@@ -27,6 +31,8 @@ public struct ReleaseUpdateInfo: Equatable, Sendable, Codable {
         self.assetSize = assetSize
         self.releaseNotes = releaseNotes
         self.publishedAt = publishedAt
+        self.signatureURL = signatureURL
+        self.signatureData = signatureData
     }
 
     /// Parses tags such as `v2.4.0` or `v2.3.040926`.

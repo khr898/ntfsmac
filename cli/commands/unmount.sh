@@ -47,7 +47,8 @@ cmd_unmount() {
     local mp server
     local mounts_tmp
     mounts_tmp="$(mktemp)" || return 1
-    trap 'rm -f -- "$mounts_tmp"' INT TERM
+    trap 'rm -f -- "$mounts_tmp"; trap - INT; kill -INT $$' INT
+    trap 'rm -f -- "$mounts_tmp"; trap - TERM; kill -TERM $$' TERM
     # Real exit status, not process substitution — see mount.sh's identical comment.
     # list_active_nfs_mounts() returns 1 (own clear message already printed) if `mount` itself
     # is wedged (a known real failure mode against an unresponsive NFS server).

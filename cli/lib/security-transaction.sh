@@ -76,7 +76,8 @@ security_status_output() {
   fi
   [[ -n "$SECURITY_ANYLINUXFS_BIN" && -x "$SECURITY_ANYLINUXFS_BIN" ]] || return 1
   status_tmp="$(mktemp "${TMPDIR:-/tmp}/ntfsmac-security-status.XXXXXX")" || return 1
-  trap 'rm -f -- "$status_tmp"' INT TERM
+  trap 'rm -f -- "$status_tmp"; trap - INT; kill -INT $$' INT
+  trap 'rm -f -- "$status_tmp"; trap - TERM; kill -TERM $$' TERM
   if run_with_progress "${NTFSMAC_SECURITY_STATUS_TIMEOUT:-5}" 10 "security-status" \
     "$status_tmp" "$SECURITY_ANYLINUXFS_BIN" status; then
     /bin/cat "$status_tmp"
@@ -400,7 +401,8 @@ security_write_state() {
   chmod 700 "$SECURITY_STATE_DIR" 2>/dev/null || return 1
   state_file="$(security_state_path "$session")" || return 1
   state_tmp="$(mktemp "$SECURITY_STATE_DIR/.${session}.XXXXXX")" || return 1
-  trap 'rm -f -- "$state_tmp"' INT TERM
+  trap 'rm -f -- "$state_tmp"; trap - INT; kill -INT $$' INT
+  trap 'rm -f -- "$state_tmp"; trap - TERM; kill -TERM $$' TERM
   chmod 600 "$state_tmp" 2>/dev/null || {
     rm -f "$state_tmp"
     trap - INT TERM
@@ -481,7 +483,8 @@ security_apply_pf() {
     SECURITY_PF_REASON="PF_RULE_RENDER_FAILED"
     return 0
   }
-  trap 'rm -f -- "$rules_file"' INT TERM
+  trap 'rm -f -- "$rules_file"; trap - INT; kill -INT $$' INT
+  trap 'rm -f -- "$rules_file"; trap - TERM; kill -TERM $$' TERM
   if ! render_pf_anchor "$subnet" "$interface" "$session" > "$rules_file"; then
     rm -f "$rules_file"
     trap - INT TERM

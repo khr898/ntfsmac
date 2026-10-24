@@ -13,6 +13,7 @@ setup() {
   run render_pf_anchor "$SUBNET" "$INTERFACE" "$SESSION"
   [ "$status" -eq 0 ]
   [[ "$output" == *"block drop quick on $INTERFACE"* ]]
+  [[ "$output" == *"block drop quick on $INTERFACE inet6 all"* ]]
   [[ "$output" != *"block in all"* ]]
   [[ "$output" != *"block out all"* ]]
 }

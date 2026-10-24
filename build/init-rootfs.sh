@@ -120,6 +120,10 @@ build_vmrunner_sys() {
 }
 
 build_init_rootfs_bin() {
+  if command -v xcrun >/dev/null 2>&1 && [[ -z "${SDKROOT:-}" ]]; then
+    SDKROOT="$(xcrun --sdk macosx --show-sdk-path 2>/dev/null || true)"
+    export SDKROOT
+  fi
   (cd "$CACHE_DIR/init-rootfs" && CGO_ENABLED=1 go build -tags 'containers_image_openpgp osusergo' -ldflags="-w -s" -o bin/init-rootfs .)
 }
 

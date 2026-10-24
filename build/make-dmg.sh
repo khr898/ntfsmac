@@ -64,6 +64,32 @@ main() {
     exit 1
   fi
 
+  # Cryptographic Ed25519 signing for update verification: if a signing key is configured,
+  # sign the DMG and produce $DMG_OUT.sig.
+  if [[ -n "${NTFSMAC_SIGNING_KEY:-}" ]]; then
+    echo "make-dmg: signing DMG with Ed25519 key..."
+    swift -e '
+import Foundation
+import CryptoKit
+
+let keyStr = ProcessInfo.processInfo.environment["NTFSMAC_SIGNING_KEY"]!
+guard let keyData = Data(base64Encoded: keyStr.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+  FileHandle.standardError.write(Data("invalid base64 signing key\n".utf8))
+  exit(1)
+}
+let privKey = try Curve25519.Signing.PrivateKey(rawRepresentation: keyData)
+let dmgPath = CommandLine.arguments[1]
+let dmgData = try Data(contentsOf: URL(fileURLWithPath: dmgPath))
+let sig = try privKey.signature(for: dmgData)
+let sigPath = CommandLine.arguments[2]
+try sig.base64EncodedString().write(toFile: sigPath, atomically: true, encoding: .utf8)
+' "$DMG_OUT" "$DMG_OUT.sig" || {
+      echo "make-dmg: HARD-STOP — failed to sign DMG" >&2
+      exit 1
+    }
+    echo "make-dmg: signed — $DMG_OUT.sig"
+  fi
+
   echo "make-dmg: done — $DMG_OUT"
 }
 

@@ -208,13 +208,17 @@ ensure_full_xcode() {
   ok "DMG tooling: hdiutil"
 }
 
+HOMEBREW_INSTALLER_COMMIT="85d1a3fc80d8a63932f632aca8f787de11d14a64"
+HOMEBREW_INSTALLER_SHA256="5f333bbe53bc490e51e7ccb1df8779b3dd6ee73a1a7379efda216edb08ccb148"
+RUSTUP_INSTALLER_SHA256="9502b514362a21096210d498f143b8cdacda365d3dfcf45e8f5541e089ccafc0"
+
 install_homebrew() {
-  local installer
+  local installer actual_hash
   installer="$(mktemp)" || fail "Could not create a temporary Homebrew installer file."
-  info "Downloading Homebrew's official installer over HTTPS"
+  info "Downloading Homebrew's official installer (commit: $HOMEBREW_INSTALLER_COMMIT) over HTTPS"
   if ! curl --fail --show-error --silent --location \
     --proto '=https' --tlsv1.2 \
-    "https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh" \
+    "https://raw.githubusercontent.com/Homebrew/install/${HOMEBREW_INSTALLER_COMMIT}/install.sh" \
     --output "$installer"; then
     rm -f "$installer"
     fail "Homebrew's installer could not be downloaded."
@@ -223,7 +227,12 @@ install_homebrew() {
     rm -f "$installer"
     fail "Homebrew's downloaded installer is empty."
   }
-  info "Homebrew installer SHA-256: $(shasum -a 256 "$installer" | awk '{print $1}')"
+  actual_hash="$(shasum -a 256 "$installer" | awk '{print $1}')"
+  info "Homebrew installer SHA-256: $actual_hash"
+  if [[ "${NTFSMAC_ALLOW_UNPINNED_BOOTSTRAP:-0}" != "1" && "$actual_hash" != "$HOMEBREW_INSTALLER_SHA256" ]]; then
+    rm -f "$installer"
+    fail "Homebrew installer SHA-256 mismatch! Expected $HOMEBREW_INSTALLER_SHA256, got $actual_hash"
+  fi
 
   # Homebrew needs administrator access to create its Apple Silicon prefix. Its
   # NONINTERACTIVE mode deliberately refuses to open a sudo password prompt, so
@@ -300,7 +309,7 @@ load_cargo_path() {
 }
 
 install_rustup() {
-  local installer
+  local installer actual_hash
   installer="$(mktemp)" || fail "Could not create a temporary Rust installer file."
   info "Downloading rustup's official installer over HTTPS"
   if ! curl --fail --show-error --silent --location \
@@ -313,7 +322,12 @@ install_rustup() {
     rm -f "$installer"
     fail "rustup's downloaded installer is empty."
   }
-  info "rustup installer SHA-256: $(shasum -a 256 "$installer" | awk '{print $1}')"
+  actual_hash="$(shasum -a 256 "$installer" | awk '{print $1}')"
+  info "rustup installer SHA-256: $actual_hash"
+  if [[ "${NTFSMAC_ALLOW_UNPINNED_BOOTSTRAP:-0}" != "1" && "$actual_hash" != "$RUSTUP_INSTALLER_SHA256" ]]; then
+    rm -f "$installer"
+    fail "rustup installer SHA-256 mismatch! Expected $RUSTUP_INSTALLER_SHA256, got $actual_hash"
+  fi
   /bin/sh "$installer" -y --profile minimal || {
     rm -f "$installer"
     fail "Rust installation failed."

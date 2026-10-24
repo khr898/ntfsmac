@@ -1,5 +1,9 @@
 import Foundation
+import Darwin
 import HelperShared
+
+// Ignore SIGPIPE so writing to closed child pipes returns EPIPE instead of terminating the daemon.
+signal(SIGPIPE, SIG_IGN)
 
 // `--print-tree-hash <dir>`: not part of the XPC service — a build-time-only tool mode so
 // `build/package-app.sh` can compute `GeneratedCLIManifest.expectedTreeHashHex` using the exact
@@ -17,7 +21,7 @@ if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--print-tree-h
 
 final class HelperListenerDelegate: NSObject, NSXPCListenerDelegate {
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection) -> Bool {
-        guard verifyClientIdentity(pid: connection.processIdentifier, expectedIdentifier: "com.khr898.ntfsmac") else {
+        guard verifyClientIdentity(connection: connection, expectedIdentifier: "com.khr898.ntfsmac") else {
             return false
         }
         connection.exportedInterface = NSXPCInterface(with: HelperXPCProtocol.self)

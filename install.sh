@@ -248,14 +248,21 @@ setup_alpine_environment() {
 
   local anylinuxfs_bin="${NTFSMAC_ANYLINUXFS_BIN:-$PREFIX/bin/anylinuxfs}"
   if [[ -x "$anylinuxfs_bin" ]]; then
-    SUDO_USER="$target_user" \
-    SUDO_UID="$target_uid" \
-    SUDO_GID="$target_gid" \
-    HOME="$target_home" \
-    "$anylinuxfs_bin" init || {
-      echo "install.sh: WARN — anylinuxfs init encountered an issue (runtime will initialize on first mount)" >&2
-      return 0
-    }
+    if [[ $EUID -eq 0 && "$target_user" != "root" ]]; then
+      sudo -u "$target_user" HOME="$target_home" "$anylinuxfs_bin" init || {
+        echo "install.sh: WARN — anylinuxfs init encountered an issue (runtime will initialize on first mount)" >&2
+        return 0
+      }
+    else
+      SUDO_USER="$target_user" \
+      SUDO_UID="$target_uid" \
+      SUDO_GID="$target_gid" \
+      HOME="$target_home" \
+      "$anylinuxfs_bin" init || {
+        echo "install.sh: WARN — anylinuxfs init encountered an issue (runtime will initialize on first mount)" >&2
+        return 0
+      }
+    fi
   fi
 
   if [[ -n "$target_home" && -d "$target_home/.anylinuxfs" ]]; then
@@ -266,18 +273,10 @@ setup_alpine_environment() {
 }
 
 main() {
-  # Self-elevate only if actually needed — mirrors mount.sh/uninstall.sh's own pattern, but
-  # gated on real writability so a machine where $PREFIX/$PATH_SYMLINK's parent is already
-  # user-writable (common: a prior Homebrew install commonly chowns /usr/local) never gets a
-  # needless password prompt, and so the test suite (which always points both at a scratch
-  # dir) never triggers it either.
+  # Self-elevate to root: the privileged helper and system rely on root:wheel ownership and
+  # strict non-writability for security. Only tests opt out via NTFSMAC_SKIP_ROOT_CHECK=1.
   if [[ "${NTFSMAC_SKIP_ROOT_CHECK:-}" != "1" && $EUID -ne 0 ]]; then
-    local prefix_parent symlink_parent needs_root=""
-    prefix_parent="$(dirname "$PREFIX")"
-    [[ -w "$PREFIX" || ( ! -e "$PREFIX" && -w "$prefix_parent" ) ]] || needs_root=1
-    symlink_parent="$(dirname "$PATH_SYMLINK")"
-    [[ -w "$symlink_parent" || ! -e "$symlink_parent" ]] || needs_root=1
-    [[ -n "$needs_root" ]] && exec sudo "$0" "$@"
+    exec sudo "$0" "$@"
   fi
 
   # `--no-path-link`: the GUI's privileged helper runs this same script (already root, via
@@ -293,6 +292,14 @@ main() {
   refuse_non_arm64 || exit 1
   install_binaries || exit 1
   install_cli || exit 1
+
+  # Enforce root:wheel ownership and strip group/other write permissions.
+  if [[ $EUID -eq 0 ]]; then
+    chown -R root:wheel "$PREFIX" 2>/dev/null || true
+    chmod -R u=rwX,go=rX "$PREFIX" 2>/dev/null || true
+    chmod -R go-w "$PREFIX" 2>/dev/null || true
+  fi
+
   [[ -z "$skip_link" ]] && link_into_path
 
   local target_user target_home
